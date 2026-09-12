@@ -21,7 +21,10 @@ jobs:
         with:
           python-version: '3.12'
       - name: Instalar dependencias de prueba
-        run: pip install pytest fastapi pydantic httpx
+        # Ligeras: los modelos de embeddings (sentence-transformers/torch) y
+        # GLiNER se importan de forma diferida, así que no hacen falta aquí.
+        # weaviate-client sí es necesario porque build_filter() lo importa.
+        run: pip install pytest fastapi pydantic httpx weaviate-client
       - name: Ejecutar pruebas
         run: python -m pytest -q tests
 
