@@ -1,8 +1,44 @@
-# Vectorizar el corpus con OpenAI (guía paso a paso)
+# Vectorizar el corpus (guía paso a paso)
 
 Esta guía genera los **vectores del corpus jurídico** para activar la búsqueda
 semántica en el portal desplegado en Vercel. Se ejecuta **una sola vez** (y de
 nuevo solo si cambia el corpus).
+
+---
+
+## 0. Vía recomendada: reutilizar los vectores locales (sin API, sin costo)
+
+El pipeline local **ya calculó** los vectores con BGE-M3 al indexar en Weaviate.
+En lugar de volver a vectorizar por API (lo que además choca con los bloqueos
+geográficos de algunos proveedores), basta con alinearlos con el corpus:
+
+```bash
+python -m scripts.export_vectors_local
+```
+
+Lee `space/data/objects.jsonl` + `space/data/vectors.npy` y escribe
+`web/api/_data/vectors.f32` (2 083 × 1 024, L2-normalizado) y su meta.
+
+**Ventajas:** costo cero, sin claves, sin restricciones de país y sin volver a
+ejecutar el modelo. El emparejamiento es por texto exacto, así que si algún
+fragmento no encontrara su vector el script lo avisa y se detiene.
+
+Con esto, **el corpus está listo**. Lo único que necesita un proveedor externo
+es la **consulta** en tiempo de ejecución (la función de Vercel no puede correr
+BGE-M3), y ese proveedor debe servir **el mismo modelo**: `BAAI/bge-m3`.
+
+### Si no consigues proveedor de embeddings
+
+No pasa nada: el portal funciona igual con BM25, que en la evaluación del corpus
+fue **la estrategia con mejor nDCG@5 (0.863)**. La búsqueda semántica es una
+mejora, no un requisito.
+
+---
+
+## Vía alternativa: vectorizar por API
+
+Úsala solo si prefieres otro modelo (por ejemplo, uno de OpenAI) o si el corpus
+cambia y quieres regenerarlo con un proveedor externo.
 
 ---
 
