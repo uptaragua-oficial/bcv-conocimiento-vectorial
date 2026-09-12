@@ -59,32 +59,51 @@ def _config() -> dict:
 
 
 def _embeber(cfg: dict, textos: list[str]) -> list[list[float]]:
-    import requests
+    """Llama a POST /embeddings usando solo la biblioteca estándar.
+
+    Sin dependencias externas: el script se ejecuta con un Python 3 limpio.
+    """
+    import urllib.error
+    import urllib.request
 
     payload: dict = {"model": cfg["modelo"], "input": textos}
     if cfg.get("dimensions"):
         payload["dimensions"] = cfg["dimensions"]
+    cuerpo = json.dumps(payload).encode("utf-8")
+
+    peticion = urllib.request.Request(
+        cfg["url"],
+        data=cuerpo,
+        headers={
+            "Authorization": f"Bearer {cfg['clave']}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
 
     for intento in range(4):
-        resp = requests.post(
-            cfg["url"],
-            headers={
-                "Authorization": f"Bearer {cfg['clave']}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=120,
-        )
-        if resp.status_code == 429 or resp.status_code >= 500:
-            espera = 2 ** intento
-            print(f"    HTTP {resp.status_code}; reintento en {espera}s")
-            time.sleep(espera)
-            continue
-        resp.raise_for_status()
-        datos = resp.json()["data"]
-        datos.sort(key=lambda d: d.get("index", 0))
-        return [d["embedding"] for d in datos]
-    raise SystemExit(f"La API de embeddings falló tras varios intentos ({resp.status_code})")
+        try:
+            with urllib.request.urlopen(peticion, timeout=120) as resp:
+                datos = json.loads(resp.read().decode("utf-8"))
+            filas = datos["data"]
+            filas.sort(key=lambda d: d.get("index", 0))
+            return [f["embedding"] for f in filas]
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 or exc.code >= 500:
+                espera = 2**intento
+                print(f"    HTTP {exc.code}; reintento en {espera}s…")
+                time.sleep(espera)
+                continue
+            detalle = exc.read().decode("utf-8", "replace")[:300]
+            raise SystemExit(
+                f"\nError HTTP {exc.code} de la API de embeddings:\n{detalle}\n\n"
+                "Revisa que la clave sea válida y que el modelo exista."
+            ) from exc
+        except urllib.error.URLError as exc:
+            if intento == 3:
+                raise SystemExit(f"No se pudo conectar con {cfg['url']}: {exc.reason}") from exc
+            time.sleep(2**intento)
+    raise SystemExit("La API de embeddings falló tras varios intentos")
 
 
 def run() -> dict:
@@ -133,6 +152,16 @@ def run() -> dict:
     mb = VECTORES.stat().st_size / 1e6
     print(f"\nOK · {len(vectores)} vectores de {dim} dims → {VECTORES} ({mb:.1f} MB)")
     print(f"Meta → {META}")
+    print(
+        "\nSiguientes pasos:\n"
+        "  1) Versiona los vectores:\n"
+        "       git add web/api/_data/vectors.f32 web/api/_data/embeddings_meta.json\n"
+        f"       git commit -m 'chore: vectorizar el corpus con {cfg['modelo']}'\n"
+        "  2) En Vercel → Settings → Environment Variables, añade:\n"
+        f"       EMBEDDINGS_API_KEY = <tu clave>\n"
+        f"       EMBEDDINGS_MODEL   = {cfg['modelo']}\n"
+        "  3) Redespliega y comprueba que /api/health devuelve recuperacion: hibrida"
+    )
     return meta
 
 
