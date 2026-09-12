@@ -175,26 +175,102 @@ test('proveedorLLM prioriza DeepSeek y cae a Groq', async () => {
 })
 
 // ---------------- Embeddings (búsqueda semántica) ----------------
-test('embeddingsConfig usa OpenAI por defecto y admite otros proveedores', async () => {
-  const { embeddingsConfig } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
-  const claves = ['EMBEDDINGS_API_KEY', 'OPENAI_API_KEY', 'EMBEDDINGS_MODEL', 'EMBEDDINGS_BASE_URL']
+test('embeddingsConfig deduce la configuración de la meta y admite overrides', async () => {
+  const { embeddingsConfig, metaVectores } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
+  const claves = [
+    'EMBEDDINGS_API_KEY', 'OPENAI_API_KEY', 'EMBEDDINGS_MODEL', 'EMBEDDINGS_URL',
+    'EMBEDDINGS_BASE_URL', 'EMBEDDINGS_FORMATO', 'EMBEDDINGS_PREFIJO_CONSULTA',
+  ]
   const previo = Object.fromEntries(claves.map((k) => [k, process.env[k]]))
   try {
     claves.forEach((k) => delete process.env[k])
     assert.equal(embeddingsConfig(), null, 'sin clave no hay embeddings')
 
-    process.env.OPENAI_API_KEY = 'sk-prueba'
-    let cfg = embeddingsConfig()
-    assert.equal(cfg.modelo, 'text-embedding-3-small')
-    assert.ok(cfg.url.startsWith('https://api.openai.com/v1'))
+    process.env.EMBEDDINGS_API_KEY = 'clave-prueba'
+    const meta = metaVectores()
+    const cfg = embeddingsConfig()
+    if (meta) {
+      // Con vectores generados, la configuración viene de la meta
+      assert.equal(cfg.modelo, meta.modelo)
+      assert.equal(cfg.url, meta.url_sugerida)
+      assert.equal(cfg.formato, meta.formato || 'openai')
+      assert.equal(cfg.prefijo, meta.prefijo_consulta || '')
+    } else {
+      assert.equal(cfg.modelo, 'text-embedding-3-small')
+      assert.ok(cfg.url.endsWith('/embeddings'))
+    }
 
-    process.env.EMBEDDINGS_MODEL = 'BAAI/bge-m3'
-    process.env.EMBEDDINGS_BASE_URL = 'https://api.deepinfra.com/v1/openai'
-    cfg = embeddingsConfig()
-    assert.equal(cfg.modelo, 'BAAI/bge-m3')
-    assert.ok(cfg.url.startsWith('https://api.deepinfra.com/v1/openai'))
-    assert.ok(cfg.url.endsWith('/embeddings'))
+    // Las variables explícitas tienen prioridad
+    process.env.EMBEDDINGS_MODEL = 'otro-modelo'
+    process.env.EMBEDDINGS_URL = 'https://ejemplo.test/v1/embeddings'
+    process.env.EMBEDDINGS_PREFIJO_CONSULTA = 'q: '
+    const c2 = embeddingsConfig()
+    assert.equal(c2.modelo, 'otro-modelo')
+    assert.equal(c2.url, 'https://ejemplo.test/v1/embeddings')
+    assert.equal(c2.prefijo, 'q: ')
   } finally {
+    for (const [k, v] of Object.entries(previo)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})
+
+test('embeberConsulta entiende el formato de HuggingFace y aplica el prefijo', async () => {
+  const { embeberConsulta } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
+  const claves = ['EMBEDDINGS_API_KEY', 'EMBEDDINGS_URL', 'EMBEDDINGS_FORMATO', 'EMBEDDINGS_PREFIJO_CONSULTA', 'EMBEDDINGS_MODEL']
+  const previo = Object.fromEntries(claves.map((k) => [k, process.env[k]]))
+  const fetchOriginal = globalThis.fetch
+  try {
+    process.env.EMBEDDINGS_API_KEY = 'clave-prueba'
+    process.env.EMBEDDINGS_URL = 'https://router.test/models/x'
+    process.env.EMBEDDINGS_FORMATO = 'huggingface'
+    process.env.EMBEDDINGS_MODEL = 'x'
+    process.env.EMBEDDINGS_PREFIJO_CONSULTA = 'query: '
+
+    let enviado
+    globalThis.fetch = async (url, opciones) => {
+      enviado = JSON.parse(opciones.body)
+      return { ok: true, json: async () => [[3, 4]] } // formato HF: [[...]]
+    }
+
+    const v = await embeberConsulta('tipo de cambio')
+    assert.deepEqual(enviado, { inputs: ['query: tipo de cambio'] })
+    assert.ok(Math.abs(Math.hypot(...v) - 1) < 1e-6)
+    assert.ok(Math.abs(v[0] - 0.6) < 1e-6)
+  } finally {
+    globalThis.fetch = fetchOriginal
+    for (const [k, v] of Object.entries(previo)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})
+
+test('embeberConsulta entiende el formato OpenAI', async () => {
+  const { embeberConsulta } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
+  const claves = ['EMBEDDINGS_API_KEY', 'EMBEDDINGS_URL', 'EMBEDDINGS_FORMATO', 'EMBEDDINGS_PREFIJO_CONSULTA', 'EMBEDDINGS_MODEL']
+  const previo = Object.fromEntries(claves.map((k) => [k, process.env[k]]))
+  const fetchOriginal = globalThis.fetch
+  try {
+    process.env.EMBEDDINGS_API_KEY = 'clave-prueba'
+    process.env.EMBEDDINGS_URL = 'https://api.test/v1/embeddings'
+    process.env.EMBEDDINGS_FORMATO = 'openai'
+    process.env.EMBEDDINGS_MODEL = 'x'
+    delete process.env.EMBEDDINGS_PREFIJO_CONSULTA
+
+    let enviado
+    globalThis.fetch = async (url, opciones) => {
+      enviado = JSON.parse(opciones.body)
+      return { ok: true, json: async () => ({ data: [{ embedding: [0, 5] }] }) }
+    }
+
+    const v = await embeberConsulta('consulta')
+    assert.equal(enviado.model, 'x')
+    assert.deepEqual(enviado.input, ['consulta'])
+    assert.equal(v[1], 1)
+  } finally {
+    globalThis.fetch = fetchOriginal
     for (const [k, v] of Object.entries(previo)) {
       if (v === undefined) delete process.env[k]
       else process.env[k] = v
@@ -210,11 +286,15 @@ test('normalizarL2 deja el vector con norma unitaria', async () => {
   assert.ok(Math.abs(v[1] - 0.8) < 1e-6)
 })
 
-test('sin vectores del corpus, la búsqueda cae a BM25', async () => {
+test('los vectores del corpus son coherentes con su meta', async () => {
   const { vectoresCorpus, metaVectores } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
-  // En el repositorio no se versionan vectores hasta vectorizar el corpus.
-  if (metaVectores()) {
-    assert.ok(vectoresCorpus(), 'si hay meta debe haber vectores')
+  const meta = metaVectores()
+  if (meta) {
+    const v = vectoresCorpus()
+    assert.ok(v, 'si hay meta debe haber vectores')
+    assert.equal(v.n, meta.n)
+    assert.equal(v.dim, meta.dim)
+    assert.equal(v.plano.length, meta.n * meta.dim)
   } else {
     assert.equal(vectoresCorpus(), null)
   }

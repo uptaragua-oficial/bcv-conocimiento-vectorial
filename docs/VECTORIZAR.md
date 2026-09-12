@@ -40,7 +40,30 @@ mejora, no un requisito.
 Úsala solo si prefieres otro modelo (por ejemplo, uno de OpenAI) o si el corpus
 cambia y quieres regenerarlo con un proveedor externo.
 
----
+### Desde Google Colab (recomendado si el proveedor bloquea tu país)
+
+OpenAI bloquea por región (`unsupported_country_region_territory`). Colab sale a
+internet desde regiones admitidas, así que sirve como puente.
+
+**Cuaderno listo:** [`notebooks/vectorizar_openai_colab.ipynb`](../notebooks/vectorizar_openai_colab.ipynb)
+
+[![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/uptaragua-oficial/bcv-conocimiento-vectorial/blob/main/notebooks/vectorizar_openai_colab.ipynb)
+
+Hace todo en cuatro pasos: clona el repositorio (es público), pide la clave con
+`getpass` (no queda visible en la salida), vectoriza y descarga los dos archivos.
+Incluye una celda que muestra los fragmentos más cercanos a una consulta, útil
+para **comparar la calidad entre modelos**.
+
+Al terminar, copia `vectors.f32` y `embeddings_meta.json` a `web/api/_data/`,
+haz commit y configura en Vercel `EMBEDDINGS_API_KEY` y `EMBEDDINGS_MODEL` con el
+mismo modelo que usaste.
+
+> ⚠️ Los vectores y la meta deben ser **del mismo modelo**. Si cambias uno y no
+> el otro, el sistema detecta el desajuste y vuelve a BM25 (con un aviso en
+> consola), en lugar de devolver resultados incorrectos.
+
+### Desde tu máquina
+
 
 ## 1. Entender qué pasa y por qué
 

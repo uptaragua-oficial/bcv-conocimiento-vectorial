@@ -1,8 +1,0 @@
-{
-  "n": 2083,
-  "dim": 1024,
-  "modelo": "BAAI/bge-m3",
-  "origen": "vectores BGE-M3 calculados en local (sin API)",
-  "normalizado": "l2",
-  "generado": "2026-09-12T18:19:01.881580+00:00"
-}

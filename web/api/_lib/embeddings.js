@@ -1,14 +1,19 @@
 /**
- * Cliente de embeddings (API compatible con OpenAI) para el modo nativo.
+ * Cliente de embeddings para el modo nativo de Vercel.
  *
  * La consulta se vectoriza **en la función serverless** con una sola llamada
  * HTTP; los vectores del corpus se calcularon antes, fuera de línea, con el
- * mismo modelo (ver `scripts/export_openai_embeddings.py`). Solo coinciden si
- * el modelo y las dimensiones son los mismos: por eso se validan contra la
- * meta guardada junto a los vectores.
+ * mismo modelo (ver `scripts/export_embeddings_local.py`).
  *
- * Compatible con OpenAI, DeepInfra, Jina, Voyage… (todos exponen
- * `POST /embeddings` con el formato de OpenAI).
+ * Dos formatos de proveedor:
+ *   * `openai`      → `POST {url}` con `{model, input}` y respuesta
+ *                     `{data:[{embedding}]}`. Sirve para OpenAI, DeepInfra, Jina…
+ *   * `huggingface` → `POST {url}` con `{inputs}` y respuesta `[[…]]`
+ *                     (router de inferencia de HuggingFace).
+ *
+ * La configuración se deduce de `embeddings_meta.json`, así que en Vercel basta
+ * con definir `EMBEDDINGS_API_KEY`. Cualquier variable de entorno explícita
+ * tiene prioridad.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -18,16 +23,41 @@ const AQUI = dirname(fileURLToPath(import.meta.url))
 const RUTA_VECTORES = join(AQUI, '..', '_data', 'vectors.f32')
 const RUTA_META = join(AQUI, '..', '_data', 'embeddings_meta.json')
 
+let metaCache
+let metaLeida = false
+
+/** Meta de los vectores del corpus (o null si no se han generado). */
+export function metaVectores() {
+  if (!metaLeida) {
+    metaLeida = true
+    try {
+      metaCache = JSON.parse(readFileSync(RUTA_META, 'utf-8'))
+    } catch {
+      metaCache = null
+    }
+  }
+  return metaCache
+}
+
 /** Configuración del proveedor de embeddings, o null si no hay clave. */
 export function embeddingsConfig() {
   const clave = process.env.EMBEDDINGS_API_KEY || process.env.OPENAI_API_KEY
   if (!clave) return null
-  const base = (process.env.EMBEDDINGS_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '')
-  const cfg = {
-    clave,
-    url: `${base}/embeddings`,
-    modelo: process.env.EMBEDDINGS_MODEL || 'text-embedding-3-small',
+
+  const meta = metaVectores()
+  const formato = process.env.EMBEDDINGS_FORMATO || meta?.formato || 'openai'
+  const modelo = process.env.EMBEDDINGS_MODEL || meta?.modelo || 'text-embedding-3-small'
+
+  let url = process.env.EMBEDDINGS_URL || meta?.url_sugerida || ''
+  if (!url) {
+    const base = (process.env.EMBEDDINGS_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    url = formato === 'huggingface' ? `${base}/models/${modelo}` : `${base}/embeddings`
   }
+
+  const prefijo =
+    process.env.EMBEDDINGS_PREFIJO_CONSULTA ?? meta?.prefijo_consulta ?? ''
+
+  const cfg = { clave, url, modelo, formato, prefijo }
   if (process.env.EMBEDDINGS_DIMENSIONS) {
     cfg.dimensions = Number(process.env.EMBEDDINGS_DIMENSIONS)
   }
@@ -49,8 +79,11 @@ export async function embeberConsulta(texto) {
   const cfg = embeddingsConfig()
   if (!cfg) return null
 
-  const payload = { model: cfg.modelo, input: [texto] }
-  if (cfg.dimensions) payload.dimensions = cfg.dimensions
+  const entrada = `${cfg.prefijo}${texto}`
+  const esHF = cfg.formato === 'huggingface'
+
+  const cuerpo = esHF ? { inputs: [entrada] } : { model: cfg.modelo, input: [entrada] }
+  if (!esHF && cfg.dimensions) cuerpo.dimensions = cfg.dimensions
 
   const resp = await fetch(cfg.url, {
     method: 'POST',
@@ -58,29 +91,25 @@ export async function embeberConsulta(texto) {
       Authorization: `Bearer ${cfg.clave}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(cuerpo),
   })
   if (!resp.ok) throw new Error(`embeddings HTTP ${resp.status}`)
+
   const datos = await resp.json()
-  const vector = datos?.data?.[0]?.embedding
-  if (!Array.isArray(vector)) throw new Error('respuesta de embeddings sin vector')
+  let vector
+  if (esHF) {
+    // [[...]] para una lista de entradas, [...] si el proveedor aplana
+    vector = Array.isArray(datos?.[0]) ? datos[0] : datos
+  } else {
+    vector = datos?.data?.[0]?.embedding
+  }
+  if (!Array.isArray(vector) || typeof vector[0] !== 'number') {
+    throw new Error('respuesta de embeddings sin vector')
+  }
   return normalizarL2(Float32Array.from(vector))
 }
 
-let metaCache = null
-
-/** Meta de los vectores del corpus (o null si no se han generado). */
-export function metaVectores() {
-  if (metaCache !== undefined && metaCache !== null) return metaCache
-  try {
-    metaCache = JSON.parse(readFileSync(RUTA_META, 'utf-8'))
-  } catch {
-    metaCache = null
-  }
-  return metaCache
-}
-
-let vectoresCache = null
+let vectoresCache
 
 /** Matriz de vectores del corpus como Float32Array plano (N × D). */
 export function vectoresCorpus() {
@@ -113,7 +142,6 @@ export function semanticaDisponible() {
   if (!cfg) return false
   const v = vectoresCorpus()
   if (!v) return false
-  // Si se fijó una dimensionalidad, debe coincidir con la de los vectores.
   if (cfg.dimensions && cfg.dimensions !== v.dim) return false
   if (cfg.modelo !== v.meta.modelo) {
     console.warn(
