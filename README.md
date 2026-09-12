@@ -122,7 +122,27 @@ curl -s -X POST localhost:8000/search -H 'Content-Type: application/json' -d '{
 
 ## 7. Resultados
 
-Ver `data/index/evaluation_report.json` (métricas por estrategia) y
+Ejecución real del MVP sobre el dominio jurídico (ver
+[`docs/INFORME-MVP.md`](docs/INFORME-MVP.md) para el detalle):
+
+| Etapa | Resultado |
+|---|---|
+| Ingesta | 60 páginas + 165 documentos (PDF/Excel) |
+| Extracción | 202 documentos con texto (19 escaneados sin OCR) |
+| Chunking | 2 116 chunks (925 estructurales por artículo) |
+| NER (GLiNER) | 1 923 chunks con entidades |
+| Indexado | **2 050 objetos** en Weaviate |
+
+Evaluación (40 consultas, top-5):
+
+| Estrategia | recall@5 | MRR | nDCG@5 |
+|---|---|---|---|
+| semántica | 0.650 | 0.481 | 0.524 |
+| **keyword (BM25)** | **0.900** | **0.851** | **0.863** |
+| híbrida (α=0.5) | 0.875 | 0.833 | 0.844 |
+| híbrida + re-ranking | 0.900 | 0.823 | 0.842 |
+
+Artefactos: `data/index/evaluation_report.json` (métricas) y
 `data/index/queries.jsonl` (log de consultas).
 
 ---
