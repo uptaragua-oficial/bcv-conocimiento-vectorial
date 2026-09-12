@@ -74,6 +74,15 @@ def test_metricas_recuperacion():
     assert evaluate.precision_at_k(rel, rec, 3) == 1 / 3
 
 
+def test_metricas_no_inflan_con_duplicados():
+    """Un documento repetido en el top-k no debe inflar las métricas."""
+    rel = {"a"}
+    rec = ["a", "a", "a"]  # tres chunks del mismo documento relevante
+    assert evaluate.ndcg_at_k(rel, rec, 3) == 1.0          # nDCG <= 1
+    assert evaluate.precision_at_k(rel, rec, 3) == 1 / 3   # un único acierto
+    assert evaluate.dedupe(rec) == ["a"]
+
+
 def test_filtros_se_construyen():
     from src.search import build_filter
 
