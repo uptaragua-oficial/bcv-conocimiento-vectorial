@@ -86,32 +86,42 @@ def build_eval_set(n: int = 40) -> list[dict]:
 # ----------------------------------------------------------------------
 # Métricas
 # ----------------------------------------------------------------------
+def dedupe(seq: list) -> list:
+    """Elimina repetidos preservando el orden (un documento cuenta una vez)."""
+    vistos, salida = set(), []
+    for x in seq:
+        if x in vistos:
+            continue
+        vistos.add(x)
+        salida.append(x)
+    return salida
+
+
 def recall_at_k(relevantes: set, recuperados: list, k: int) -> float:
     if not relevantes:
         return 0.0
-    return len(relevantes & set(recuperados[:k])) / len(relevantes)
+    return len(relevantes & set(dedupe(recuperados)[:k])) / len(relevantes)
 
 
 def precision_at_k(relevantes: set, recuperados: list, k: int) -> float:
     if k == 0:
         return 0.0
-    return len(relevantes & set(recuperados[:k])) / k
+    return len(relevantes & set(dedupe(recuperados)[:k])) / k
 
 
 def reciprocal_rank(relevantes: set, recuperados: list) -> float:
-    for i, r in enumerate(recuperados, 1):
+    for i, r in enumerate(dedupe(recuperados), 1):
         if r in relevantes:
             return 1.0 / i
     return 0.0
 
 
 def ndcg_at_k(relevantes: set, recuperados: list, k: int) -> float:
-    dcg = sum(
-        1.0 / math.log2(i + 1)
-        for i, r in enumerate(recuperados[:k], 1)
-        if r in relevantes
-    )
-    idcg = sum(1.0 / math.log2(i + 1) for i in range(1, min(len(relevantes), k) + 1))
+    """nDCG@k con relevancia binaria y documentos únicos (∈ [0, 1])."""
+    ranking = dedupe(recuperados)[:k]
+    dcg = sum(1.0 / math.log2(i + 1) for i, r in enumerate(ranking, 1) if r in relevantes)
+    ideal = min(len(relevantes), k)
+    idcg = sum(1.0 / math.log2(i + 1) for i in range(1, ideal + 1))
     return dcg / idcg if idcg else 0.0
 
 
