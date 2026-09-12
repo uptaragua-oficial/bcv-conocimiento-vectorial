@@ -131,12 +131,22 @@ def test_proveedor_llm_prioriza_deepseek(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-prueba")
     p = rag.proveedor_llm()
     assert p["nombre"] == "deepseek"
-    assert p["modelo"] == "deepseek-chat"
+    assert p["modelo"] == "deepseek-flash"
     assert p["url"].startswith("https://api.deepseek.com")
     assert rag.llm_disponible() is True
 
 
 def test_proveedor_llm_respeta_modelo_configurado(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-prueba")
-    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-reasoner")
-    assert rag.proveedor_llm()["modelo"] == "deepseek-reasoner"
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
+    assert rag.proveedor_llm()["modelo"] == "deepseek-v4-pro"
+
+
+def test_deepseek_desactiva_thinking_por_defecto(monkeypatch):
+    """El modo thinking viene activado por defecto en DeepSeek; lo apagamos."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-prueba")
+    monkeypatch.delenv("DEEPSEEK_THINKING", raising=False)
+    assert rag.proveedor_llm()["thinking"] == "disabled"
+
+    monkeypatch.setenv("DEEPSEEK_THINKING", "enabled")
+    assert rag.proveedor_llm()["thinking"] == "enabled"

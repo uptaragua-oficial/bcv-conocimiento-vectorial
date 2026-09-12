@@ -164,9 +164,15 @@ En **Settings → Variables and secrets**:
 | Secreto | Valor |
 |---|---|
 | `DEEPSEEK_API_KEY` | Tu clave de <https://platform.deepseek.com/api_keys> |
-| `DEEPSEEK_MODEL` | `deepseek-chat` (opcional) |
+| `DEEPSEEK_MODEL` | `deepseek-flash` (opcional) o `deepseek-v4-pro` |
+| `DEEPSEEK_THINKING` | `disabled` (por defecto) o `enabled` |
 | `GROQ_API_KEY` | Alternativa a DeepSeek: <https://console.groq.com/keys> |
 | `CORS_ORIGINS` | La URL de tu app en Vercel (opcional; por defecto `*`) |
+
+> El **modo thinking** de DeepSeek viene activado por defecto con esfuerzo alto:
+> añade latencia y anula `temperature`. Para un asistente que responde sobre
+> contexto recuperado se desactiva por defecto; actívalo con
+> `DEEPSEEK_THINKING=enabled` si prefieres priorizar la calidad del razonamiento.
 
 Sin ninguna clave el asistente funciona en **modo extractivo** (devuelve los
 fragmentos normativos con sus citas).

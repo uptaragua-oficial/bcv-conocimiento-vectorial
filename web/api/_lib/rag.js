@@ -34,7 +34,12 @@ function proveedorLLM() {
       nombre: 'deepseek',
       url: `${base}/chat/completions`,
       clave: process.env.DEEPSEEK_API_KEY,
-      modelo: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+      // Modelos vigentes: deepseek-flash | deepseek-v4-pro
+      modelo: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+      // El modo "thinking" viene activado por defecto (esfuerzo alto): añade
+      // latencia y anula `temperature`. Para un asistente con contexto
+      // recuperado se desactiva por defecto.
+      thinking: process.env.DEEPSEEK_THINKING || 'disabled',
     }
   }
   if (process.env.GROQ_API_KEY) {
@@ -100,23 +105,33 @@ function respuestaExtractiva(resultados) {
 }
 
 async function generarLLM(proveedor, mensaje, contexto, historial) {
+  const cuerpo = {
+    model: proveedor.modelo,
+    max_tokens: 900,
+    messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...historialMensajes(historial),
+        { role: 'user', content: `CONTEXTO:\n${contexto}\n\nPREGUNTA: ${mensaje}` },
+    ],
+  }
+
+  if (proveedor.nombre === 'deepseek') {
+    // El modo thinking (activo por defecto en DeepSeek) ignora `temperature`;
+    // se envía solo cuando está desactivado.
+    if (proveedor.thinking !== 'enabled') cuerpo.temperature = 0.1
+    cuerpo.thinking = { type: proveedor.thinking === 'enabled' ? 'enabled' : 'disabled' }
+  } else {
+    cuerpo.temperature = 0.1
+  }
+
   const resp = await fetch(proveedor.url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${proveedor.clave}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: proveedor.modelo,
-      temperature: 0.1,
-      max_tokens: 900,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...historialMensajes(historial),
-        { role: 'user', content: `CONTEXTO:\n${contexto}\n\nPREGUNTA: ${mensaje}` },
-      ],
-    }),
-  });
+    body: JSON.stringify(cuerpo),
+  })
   if (!resp.ok) throw new Error(`${proveedor.nombre} HTTP ${resp.status}`);
   const data = await resp.json();
   return (data.choices?.[0]?.message?.content || '').trim();

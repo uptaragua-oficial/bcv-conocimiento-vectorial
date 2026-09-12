@@ -42,7 +42,8 @@ desplegado en Vercel.
 | Secreto | Obligatorio | Descripción |
 |---|---|---|
 | `DEEPSEEK_API_KEY` | No | Activa la generación con LLM (DeepSeek) |
-| `DEEPSEEK_MODEL` | No | Modelo a usar (por defecto `deepseek-chat`) |
+| `DEEPSEEK_MODEL` | No | `deepseek-flash` (por defecto) o `deepseek-v4-pro` |
+| `DEEPSEEK_THINKING` | No | `disabled` (por defecto) o `enabled` |
 | `GROQ_API_KEY` | No | Alternativa a DeepSeek (Groq) |
 | `CORS_ORIGINS` | No | Orígenes permitidos; por defecto `*` |
 

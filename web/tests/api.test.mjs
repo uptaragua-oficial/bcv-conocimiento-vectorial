@@ -129,11 +129,13 @@ test('proveedorLLM prioriza DeepSeek y cae a Groq', async () => {
     deepseek: process.env.DEEPSEEK_API_KEY,
     groq: process.env.GROQ_API_KEY,
     modelo: process.env.DEEPSEEK_MODEL,
+    thinking: process.env.DEEPSEEK_THINKING,
   }
   try {
     delete process.env.DEEPSEEK_API_KEY
     delete process.env.GROQ_API_KEY
     delete process.env.DEEPSEEK_MODEL
+    delete process.env.DEEPSEEK_THINKING
     assert.equal(proveedorLLM(), null)
 
     process.env.GROQ_API_KEY = 'gsk_prueba'
@@ -142,16 +144,21 @@ test('proveedorLLM prioriza DeepSeek y cae a Groq', async () => {
     process.env.DEEPSEEK_API_KEY = 'sk-prueba'
     const p = proveedorLLM()
     assert.equal(p.nombre, 'deepseek')
-    assert.equal(p.modelo, 'deepseek-chat')
+    assert.equal(p.modelo, 'deepseek-flash')
+    assert.equal(p.thinking, 'disabled')
     assert.ok(p.url.startsWith('https://api.deepseek.com'))
 
-    process.env.DEEPSEEK_MODEL = 'deepseek-reasoner'
-    assert.equal(proveedorLLM().modelo, 'deepseek-reasoner')
+    process.env.DEEPSEEK_MODEL = 'deepseek-v4-pro'
+    assert.equal(proveedorLLM().modelo, 'deepseek-v4-pro')
+
+    process.env.DEEPSEEK_THINKING = 'enabled'
+    assert.equal(proveedorLLM().thinking, 'enabled')
   } finally {
     for (const [k, v] of [
       ['DEEPSEEK_API_KEY', previo.deepseek],
       ['GROQ_API_KEY', previo.groq],
       ['DEEPSEEK_MODEL', previo.modelo],
+      ['DEEPSEEK_THINKING', previo.thinking],
     ]) {
       if (v === undefined) delete process.env[k]
       else process.env[k] = v

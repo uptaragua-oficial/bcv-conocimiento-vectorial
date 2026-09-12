@@ -34,7 +34,8 @@ PROVEEDORES = {
         "url_env": "DEEPSEEK_BASE_URL",
         "url_default": "https://api.deepseek.com",
         "modelo_env": "DEEPSEEK_MODEL",
-        "modelo_default": "deepseek-chat",
+        # Modelos vigentes: deepseek-flash | deepseek-v4-pro
+        "modelo_default": "deepseek-flash",
     },
     "groq": {
         "clave_env": "GROQ_API_KEY",
@@ -54,12 +55,18 @@ def proveedor_llm() -> dict | None:
         if not clave:
             continue
         base = os.getenv(cfg["url_env"], cfg["url_default"]).rstrip("/")
-        return {
+        proveedor = {
             "nombre": nombre,
             "clave": clave,
             "url": f"{base}/chat/completions",
             "modelo": os.getenv(cfg["modelo_env"], cfg["modelo_default"]),
         }
+        if nombre == "deepseek":
+            # El modo "thinking" viene activado por defecto (esfuerzo alto):
+            # añade latencia y anula `temperature`. Para un asistente con
+            # contexto recuperado se desactiva por defecto.
+            proveedor["thinking"] = os.getenv("DEEPSEEK_THINKING", "disabled")
+        return proveedor
     return None
 
 
@@ -138,7 +145,6 @@ def _generar_llm(proveedor: dict, mensaje: str, contexto: str, historial: list[d
 
     payload = {
         "model": proveedor["modelo"],
-        "temperature": 0.1,
         "max_tokens": 900,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -146,6 +152,17 @@ def _generar_llm(proveedor: dict, mensaje: str, contexto: str, historial: list[d
             {"role": "user", "content": f"CONTEXTO:\n{contexto}\n\nPREGUNTA: {mensaje}"},
         ],
     }
+
+    if proveedor["nombre"] == "deepseek":
+        # El modo thinking ignora `temperature`; se envía solo si está apagado.
+        if proveedor.get("thinking") != "enabled":
+            payload["temperature"] = 0.1
+        payload["thinking"] = {
+            "type": "enabled" if proveedor.get("thinking") == "enabled" else "disabled"
+        }
+    else:
+        payload["temperature"] = 0.1
+
     resp = requests.post(
         proveedor["url"],
         headers={
