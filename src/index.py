@@ -60,10 +60,20 @@ def load_chunks() -> list[dict]:
     return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
-def run(recreate: bool = False, embed_batch: int = 16) -> dict:
+def hashes_indexados(col) -> set[str]:
+    """Doc-hashes ya presentes en la colección (para indexado reanudable)."""
+    vistos: set[str] = set()
+    for obj in col.iterator(return_properties=["doc_hash"]):
+        h = obj.properties.get("doc_hash")
+        if h:
+            vistos.add(h)
+    return vistos
+
+
+def run(recreate: bool = False, embed_batch: int = 32) -> dict:
     chunks = load_chunks()
     print(f"Indexando {len(chunks)} chunks en Weaviate (colección "
-          f"'{settings.WEAVIATE_COLLECTION}')...\n")
+          f"'{settings.WEAVIATE_COLLECTION}')...\n", flush=True)
 
     if not store.is_ready():
         raise SystemExit(
@@ -73,20 +83,34 @@ def run(recreate: bool = False, embed_batch: int = 16) -> dict:
     insertados = 0
     with store.collection(recreate=recreate) as (_client, col):
         if recreate:
-            print("Colección recreada (vaciada).")
+            print("Colección recreada (vaciada).", flush=True)
 
-        for i in range(0, len(chunks), embed_batch):
-            lote = chunks[i : i + embed_batch]
+        # --- Indexado reanudable: omitir lo ya indexado y deduplicar ---
+        existentes = hashes_indexados(col)
+        pendientes, vistos = [], set(existentes)
+        for c in chunks:
+            h = c.get("doc_hash")
+            if h and h in vistos:
+                continue
+            if h:
+                vistos.add(h)
+            pendientes.append(c)
+
+        print(f"  ya indexados: {len(existentes)} · por indexar: {len(pendientes)}",
+              flush=True)
+
+        for i in range(0, len(pendientes), embed_batch):
+            lote = pendientes[i : i + embed_batch]
             vectores = embeddings.embed_documents([c["texto"] for c in lote])
             with col.batch.dynamic() as batch:
                 for c, vec in zip(lote, vectores):
                     batch.add_object(properties=_propiedades(c), vector=vec)
             insertados += len(lote)
-            print(f"  indexados {insertados}/{len(chunks)}")
+            print(f"  indexados {insertados}/{len(pendientes)}", flush=True)
 
         total = store.count_objects(col)
 
-    print(f"\nResumen indexado: {insertados} objetos enviados · {total} en la colección")
+    print(f"\nResumen indexado: {insertados} objetos enviados · {total} en la colección", flush=True)
     return {"insertados": insertados, "total": total}
 
 
@@ -100,7 +124,11 @@ def reset() -> None:
 if __name__ == "__main__":
     import sys
 
+    lote = 32
+    for arg in sys.argv:
+        if arg.startswith("--batch="):
+            lote = int(arg.split("=", 1)[1])
     if "--reset" in sys.argv:
         reset()
     else:
-        run(recreate="--recreate" in sys.argv)
+        run(recreate="--recreate" in sys.argv, embed_batch=lote)
