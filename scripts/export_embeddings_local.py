@@ -104,7 +104,17 @@ def run() -> dict:
     else:
         from sentence_transformers import SentenceTransformer
 
-        modelo = SentenceTransformer(MODELO, device="cpu")
+        # Usa la GPU si está disponible (requiere una compilación CUDA de torch).
+        # Se puede forzar con EMBED_DEVICE=cpu|cuda|mps
+        import torch
+
+        dispositivo = os.getenv("EMBED_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu")
+        if dispositivo == "cuda":
+            print(f"  GPU detectada: {torch.cuda.get_device_name(0)}")
+        else:
+            print(f"  Dispositivo: {dispositivo} (torch {torch.__version__})")
+
+        modelo = SentenceTransformer(MODELO, device=dispositivo)
         dim = int(modelo.get_sentence_embedding_dimension())
 
         with DESTINO.open("ab") as f:
