@@ -1,0 +1,44 @@
+# ============================================================
+# Weaviate 1.28.x — motor vectorial del MVP (dominio jurídico)
+# ============================================================
+# Uso:
+#   docker compose up -d
+#   docker compose logs -f weaviate
+#   docker compose down
+#
+# La consola REST/GraphQL queda en http://localhost:8080
+# La API gRPC (cliente v4) queda en localhost:50051
+# ============================================================
+services:
+  weaviate:
+    image: semitechnologies/weaviate:1.28.4
+    container_name: bcv-weaviate
+    restart: unless-stopped
+    ports:
+      - "8081:8080"   # REST / GraphQL  (8080 estaba ocupado en el host)
+      - "50052:50051" # gRPC (weaviate-client v4)
+    environment:
+      # --- Persistencia ---
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      # --- Módulo de vectorización: usamos vectores propios (BGE-M3) ---
+      #     'none' = nosotros enviamos los vectores ya calculados.
+      DEFAULT_VECTORIZER_MODULE: "none"
+      ENABLE_MODULES: ""
+      # --- Autenticación anónima (MVP local) ---
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      # --- Otros ---
+      CLUSTER_HOSTNAME: "node1"
+      QUERY_DEFAULTS_LIMIT: "25"
+      LOG_LEVEL: "info"
+      # Recursos acotados para el MVP
+      LIMIT_RESOURCES: "true"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  weaviate_data:

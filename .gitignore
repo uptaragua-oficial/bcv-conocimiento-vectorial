@@ -1,0 +1,21 @@
+# Entorno
+.env
+.venv/
+.pylibs/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Datos (corpus y artefactos generados)
+data/raw/
+data/processed/
+data/index/
+!data/.gitkeep
+
+# Modelos y caches
+.cache/
+*.log
+
+# Sistema
+.DS_Store
