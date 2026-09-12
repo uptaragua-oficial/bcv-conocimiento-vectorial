@@ -118,6 +118,20 @@ export default function App() {
 
       {/* Conversación */}
       <main className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-4 py-5">
+        {estado && estado.status !== 'ok' && (
+          <div className="mb-4 rounded-lg border-l-4 border-bcv-gold bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-semibold">El servicio de consulta no está configurado o no responde.</p>
+            <p className="mt-1 text-xs">
+              Dirección actual: <code className="rounded bg-white px-1">{api.base}</code>
+            </p>
+            <button
+              onClick={() => setConfigAbierto(true)}
+              className="mt-2 rounded-lg bg-bcv-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-bcv-blue"
+            >
+              ⚙ Configurar la dirección del backend
+            </button>
+          </div>
+        )}
         {mensajes.length === 0 ? (
           <Sugerencias onElegir={(t) => enviar(t)} />
         ) : (
