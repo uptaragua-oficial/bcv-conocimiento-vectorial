@@ -110,6 +110,12 @@ def _rerank(query: str, items: list[dict], top_k: int) -> list[dict]:
 def _fila(obj) -> dict:
     p = obj.properties
     meta = getattr(obj, "metadata", None)
+    score = getattr(meta, "score", None)
+    distance = getattr(meta, "distance", None)
+    # En near_vector Weaviate devuelve distancia (coseno); la convertimos a
+    # similitud para que el score sea comparable entre estrategias.
+    if distance is not None and (score is None or float(score) == 0.0):
+        score = 1.0 - float(distance)
     return {
         "uuid": str(obj.uuid),
         "doc_id": p.get("doc_id"),
@@ -120,8 +126,8 @@ def _fila(obj) -> dict:
         "fuente_url": p.get("fuente_url"),
         "entidades": p.get("entidades") or [],
         "texto": p.get("texto"),
-        "score": getattr(meta, "score", None),
-        "distance": getattr(meta, "distance", None),
+        "score": score,
+        "distance": distance,
     }
 
 
