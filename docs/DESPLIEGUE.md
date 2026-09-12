@@ -1,10 +1,59 @@
 # Guía de despliegue — Portal de Consultas Normativas del BCV
 
-Arquitectura de despliegue:
+Hay **dos formas** de desplegar, y la primera no necesita ningún servidor aparte.
+
+## Modo A — Nativo de Vercel (recomendado para probar y para costo cero)
+
+Todo vive en Vercel: el frontend **y** el backend como *funciones serverless*.
+No requiere HuggingFace, ni túneles, ni servidores.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                        VERCEL                            │
+│  ┌────────────────────┐      ┌────────────────────────┐  │
+│  │ SPA React + Vite   │─────►│  /api/chat  /api/search │  │
+│  │ (estático)         │      │  BM25 sobre el corpus   │  │
+│  └────────────────────┘      │  (2 083 fragmentos)     │  │
+│                              └───────────┬────────────┘  │
+└──────────────────────────────────────────┼───────────────┘
+                                           ▼
+                                  Groq API (opcional, LLM)
+```
+
+- **Recuperación:** BM25 en JavaScript puro (índice construido en ~80 ms;
+  búsqueda en 1–3 ms). Se eligió por evidencia: en la evaluación del corpus,
+  BM25 obtuvo el mejor nDCG@5 (0.863) frente a la semántica (0.524) y la
+  híbrida (0.844).
+- **Ventaja:** costo cero, sin servidores, arranque inmediato, sin límites de
+  memoria para el modelo de embeddings.
+- **Costo:** no incluye búsqueda densa con BGE-M3 ni Weaviate (disponibles en
+  el Modo B).
+
+### Desplegar
+
+1. <https://vercel.com/new> → importar `uptaragua-oficial/bcv-conocimiento-vectorial`.
+2. **Root Directory:** `web`.
+3. **Variable de entorno (opcional):** `GROQ_API_KEY` para respuestas redactadas.
+4. **Deploy.** Listo: el portal funciona sin configurar nada más.
+
+### Verificar en local (emula Vercel)
+
+```bash
+cd web
+npm install
+npm run build
+npm run dev:vercel     # http://localhost:3000  (frontend + /api/*)
+```
+
+## Modo B — Backend dedicado (Weaviate + BGE-M3 + FastAPI)
+
+Aporta búsqueda semántica e híbrida con BGE-M3 sobre Weaviate. Requiere
+alojar el contenedor en algún proveedor (ver
+[`BACKEND-OPCIONES.md`](BACKEND-OPCIONES.md)); HuggingFace exige plan **PRO**.
 
 ```
 ┌─────────────────────────┐        HTTPS        ┌──────────────────────────────┐
-│  Vercel (frontend SPA)  │ ──────────────────► │  HuggingFace Space (backend) │
+│  Vercel (frontend SPA)  │ ──────────────────► │  Backend dedicado            │
 │  React + Vite + Tailwind│   /chat  /search    │  Weaviate + BGE-M3 + FastAPI │
 └─────────────────────────┘                     └──────────────────────────────┘
                                                               │
@@ -12,9 +61,12 @@ Arquitectura de despliegue:
                                                     Groq API (generación LLM)
 ```
 
+El portal cambia de un modo a otro **sin recompilar**: botón **⚙ Backend** o
+`?api=https://mi-backend`.
+
 ---
 
-## 1. Verificación local (ya realizada)
+## 1. Verificación local del backend dedicado
 
 ```bash
 # Motor vectorial

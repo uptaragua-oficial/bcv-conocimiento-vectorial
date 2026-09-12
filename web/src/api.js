@@ -1,19 +1,27 @@
 /**
  * Cliente del API del portal de consultas normativas.
  *
- * La URL del backend se resuelve en este orden (de mayor a menor prioridad):
- *   1. Ajuste guardado por el usuario en el navegador (localStorage).
+ * Resuelve la URL del backend en este orden:
+ *   1. Ajuste guardado por el usuario (localStorage).
  *   2. Parámetro de URL:  ?api=https://mi-backend
  *   3. Variable de compilación VITE_API_URL.
- *   4. Valor por defecto para desarrollo local.
+ *   4. Modo automático:
+ *        - en local  → backend Python en http://localhost:8000
+ *        - desplegado → funciones serverless del propio Vercel (/api/*)
  *
- * Así el portal puede apuntar a cualquier backend (Space, túnel, servidor
- * propio) sin necesidad de recompilar ni redesplegar en Vercel.
+ * Así el portal funciona en Vercel sin ningún servidor aparte, y puede
+ * apuntarse a un backend externo (Space, túnel, servidor propio) sin recompilar.
  */
 const CLAVE = 'bcv.apiUrl'
 
 function normalizar(url) {
   return (url || '').trim().replace(/\/+$/, '')
+}
+
+function porDefecto() {
+  const host = typeof window !== 'undefined' ? window.location.hostname : ''
+  if (host === 'localhost' || host === '127.0.0.1' || host === '') return 'http://localhost:8000'
+  return '' // rutas relativas: /api/* (modo nativo de Vercel)
 }
 
 function desdeParametro() {
@@ -33,15 +41,16 @@ function desdeAlmacen() {
 }
 
 export function obtenerBase() {
-  return (
-    desdeAlmacen() ||
-    desdeParametro() ||
-    normalizar(import.meta.env.VITE_API_URL) ||
-    'http://localhost:8000'
-  )
+  const guardado = desdeAlmacen()
+  if (guardado) return guardado
+  const param = desdeParametro()
+  if (param) return param
+  const compilado = normalizar(import.meta.env.VITE_API_URL)
+  if (compilado) return compilado
+  return porDefecto()
 }
 
-/** Fija (o limpia, con cadena vacía) la URL del backend y recarga. */
+/** Fija (o limpia, con cadena vacía) la URL del backend. */
 export function fijarBase(url) {
   const limpia = normalizar(url)
   try {
@@ -52,9 +61,20 @@ export function fijarBase(url) {
   }
 }
 
-async function pedir(ruta, opciones = {}) {
+/** En modo nativo las rutas viven bajo /api. */
+function ruta(p) {
+  return obtenerBase() ? p : `/api${p}`
+}
+
+/** Texto legible para la interfaz. */
+export function descripcionBase() {
   const base = obtenerBase()
-  const resp = await fetch(`${base}${ruta}`, {
+  return base || `${window.location.origin}/api (modo Vercel)`
+}
+
+async function pedir(camino, opciones = {}) {
+  const url = `${obtenerBase()}${ruta(camino)}`
+  const resp = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...opciones,
   })
@@ -73,7 +93,7 @@ async function pedir(ruta, opciones = {}) {
 
 export const api = {
   get base() {
-    return obtenerBase()
+    return descripcionBase()
   },
   health: () => pedir('/health'),
   stats: () => pedir('/stats'),
