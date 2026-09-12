@@ -30,24 +30,54 @@ cd web && npm install && npm run dev
 
 ---
 
-## 2. HuggingFace Space (backend)
+## 2. Backend
 
-### 2.1 Crear el Space
+> ⚠️ **Restricción vigente (verificada el 12/09/2026).** HuggingFace exige
+> suscripción **PRO** para Spaces **Docker** y **Gradio**; en el plan gratuito
+> solo se permiten *Static Spaces*, que no ejecutan código de servidor. El
+> Space ya está construido y **validado en local** (arranque en 17 s,
+> 2 050 objetos), pero **no se puede publicar sin PRO**. Ver
+> [`BACKEND-OPCIONES.md`](BACKEND-OPCIONES.md) para el análisis completo.
+
+### 2.A Prueba inmediata por túnel (sin costo)
+
+Permite probar el portal en Vercel hoy mismo:
+
+```bash
+# 1) Backend local
+docker compose up -d
+export PYTHONPATH=.pylibs:.
+uvicorn src.api:app --port 8000
+
+# 2) URL pública temporal
+./tools/cloudflared tunnel --url http://127.0.0.1:8000
+#   → imprime algo como https://<aleatorio>.trycloudflare.com
+```
+
+En el portal desplegado, pulsar **⚙ Backend** y pegar esa URL (se guarda en el
+navegador), o abrir `https://<tu-app>.vercel.app/?api=https://<aleatorio>.trycloudflare.com`.
+
+> Limitaciones: sin garantía de disponibilidad y requiere que la máquina local
+> permanezca encendida.
+
+### 2.B HuggingFace Space (requiere PRO)
+
+#### 2.1 Crear el Space
 
 1. Entrar a <https://huggingface.co/new-space>.
-2. **Nombre:** `bcv-consulta-normativa` (o el que prefieras).
+2. **Nombre:** `bcv-consulta-normativa`.
 3. **SDK:** `Docker` → plantilla **Blank**.
-4. **Hardware:** CPU basic (gratuito) es suficiente.
+4. **Hardware:** CPU basic.
 5. **Visibility:** Public o Private.
 
-### 2.2 Publicar el contenido
+#### 2.2 Publicar el contenido
 
 El Space necesita los archivos de `space/` **más** `space/data/` (el índice
 vectorial precomputado). El script de preparación los ensambla:
 
 ```bash
-./scripts/prepare_space.sh /tmp/bcv-space
-cd /tmp/bcv-space
+./scripts/prepare_space.sh /home/upta/DeepSeekHarness/space-build
+cd /home/upta/DeepSeekHarness/space-build
 git init -b main
 git remote add space https://huggingface.co/spaces/<usuario>/<space>
 git add -A && git commit -m "Backend de consulta normativa del BCV"
