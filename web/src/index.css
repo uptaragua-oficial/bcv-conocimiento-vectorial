@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif;
+  background: #eef3f9;
+  color: #1c2430;
+}
+
+/* Scrollbar sobrio */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b9c7d8 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #b9c7d8;
+  border-radius: 4px;
+}
