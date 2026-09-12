@@ -17,5 +17,16 @@ data/index/
 .cache/
 *.log
 
+# Frontend
+web/node_modules/
+web/dist/
+web/.env
+web/.env.local
+web/.vercel/
+
+# HuggingFace Space (artefactos generados)
+space/bin/
+space/data/
+
 # Sistema
 .DS_Store

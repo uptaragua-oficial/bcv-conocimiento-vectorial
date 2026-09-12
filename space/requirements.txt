@@ -1,0 +1,19 @@
+# Dependencias de ejecución del HuggingFace Space (sin dependencias de desarrollo).
+# torch en versión CPU para reducir el tamaño de la imagen.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch>=2.2
+
+# Embeddings (bi-encoder BGE-M3) — solo para vectorizar la consulta
+sentence-transformers>=3.0
+transformers>=4.44
+
+# Cliente del motor vectorial
+weaviate-client>=4.7,<5
+
+# Utilidades y API
+numpy>=1.26
+requests>=2.31
+fastapi>=0.111
+uvicorn>=0.30
+pydantic>=2.7
