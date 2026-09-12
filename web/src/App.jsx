@@ -3,6 +3,7 @@ import { api } from './api.js'
 import Mensaje from './components/Mensaje.jsx'
 import Filtros from './components/Filtros.jsx'
 import Sugerencias from './components/Sugerencias.jsx'
+import Configuracion from './components/Configuracion.jsx'
 
 const DISCLAIMER =
   'Este asistente entrega información normativa de fuentes públicas del BCV y no presta asesoría legal ni financiera. Verifique siempre el texto oficial.'
@@ -15,6 +16,7 @@ export default function App() {
   const [filtros, setFiltros] = useState({})
   const [catalogo, setCatalogo] = useState({ tipos_norma: [], materias: [], generacion_llm: false })
   const [estado, setEstado] = useState(null)
+  const [configAbierto, setConfigAbierto] = useState(false)
   const finRef = useRef(null)
 
   useEffect(() => {
@@ -96,6 +98,13 @@ export default function App() {
             <span className="rounded-full bg-white/15 px-2 py-1">
               {catalogo.generacion_llm ? 'Respuestas con LLM' : 'Modo extractivo'}
             </span>
+            <button
+              onClick={() => setConfigAbierto((v) => !v)}
+              title="Configurar la dirección del backend"
+              className="rounded-full bg-white/15 px-2 py-1 hover:bg-white/25"
+            >
+              ⚙ Backend
+            </button>
             {mensajes.length > 0 && (
               <button onClick={limpiar} className="rounded-full bg-white/15 px-2 py-1 hover:bg-white/25">
                 Nueva consulta
@@ -104,6 +113,8 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      <Configuracion abierto={configAbierto} onCerrar={() => setConfigAbierto(false)} />
 
       {/* Conversación */}
       <main className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto px-4 py-5">
