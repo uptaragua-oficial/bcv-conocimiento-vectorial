@@ -257,7 +257,8 @@ test('embeberConsulta entiende el formato OpenAI', async () => {
     process.env.EMBEDDINGS_URL = 'https://api.test/v1/embeddings'
     process.env.EMBEDDINGS_FORMATO = 'openai'
     process.env.EMBEDDINGS_MODEL = 'x'
-    delete process.env.EMBEDDINGS_PREFIJO_CONSULTA
+    // Vacío explícito: si no, se tomaría el prefijo de embeddings_meta.json
+    process.env.EMBEDDINGS_PREFIJO_CONSULTA = ''
 
     let enviado
     globalThis.fetch = async (url, opciones) => {

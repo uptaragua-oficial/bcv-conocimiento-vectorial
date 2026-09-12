@@ -1,0 +1,12 @@
+{
+  "n": 2083,
+  "dim": 1024,
+  "modelo": "intfloat/multilingual-e5-large",
+  "formato": "huggingface",
+  "prefijo_documento": "passage: ",
+  "prefijo_consulta": "query: ",
+  "url_sugerida": "https://router.huggingface.co/hf-inference/models/intfloat/multilingual-e5-large",
+  "normalizado": "l2",
+  "origen": "calculado en local con sentence-transformers (sin API)",
+  "generado": "2026-09-12T22:09:29.380870+00:00"
+}
