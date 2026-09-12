@@ -23,6 +23,7 @@ import json
 import math
 import random
 import re
+import time
 from datetime import datetime, timezone
 
 from config import settings
@@ -139,28 +140,28 @@ def evaluate(eval_set: list[dict], top_k: int = 5, estrategias=None) -> dict:
         print(f"\nEvaluando estrategia: {nombre}")
         acum = {"recall": 0.0, "precision": 0.0, "mrr": 0.0, "ndcg": 0.0, "latencia_ms": 0.0}
         for e in eval_set:
+            _t0 = time.perf_counter()
             res = search.search(
                 e["query"], limit=top_k, log=False,
                 modo=cfg.get("modo", "hybrid"),
                 alpha=cfg.get("alpha", 0.5),
                 rerank=cfg.get("rerank", False),
             )
-            # Relevante = mismo documento de origen (o el mismo chunk).
+            acum["latencia_ms"] += (time.perf_counter() - _t0) * 1000
+            # Relevante = mismo documento de origen (a nivel de documento).
             recuperados = [r["doc_id"] for r in res]
-            hashes = [r["uuid"] for r in res]
             relevantes = {e["doc_id_relevante"]}
             acum["recall"] += recall_at_k(relevantes, recuperados, top_k)
             acum["precision"] += precision_at_k(relevantes, recuperados, top_k)
             acum["mrr"] += reciprocal_rank(relevantes, recuperados)
             acum["ndcg"] += ndcg_at_k(relevantes, recuperados, top_k)
-            acum["latencia_ms"] += float(res[0].get("_ms", 0)) if res else 0.0
-            del hashes
         n = len(eval_set) or 1
         informe["estrategias"][nombre] = {
             "recall@k": round(acum["recall"] / n, 4),
             "precision@k": round(acum["precision"] / n, 4),
             "mrr": round(acum["mrr"] / n, 4),
             "ndcg@k": round(acum["ndcg"] / n, 4),
+            "latencia_media_ms": round(acum["latencia_ms"] / n, 2),
         }
         m = informe["estrategias"][nombre]
         print(f"  recall@{top_k}={m['recall@k']:.3f}  precision@{top_k}={m['precision@k']:.3f}  "
