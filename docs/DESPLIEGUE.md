@@ -32,9 +32,26 @@ No requiere HuggingFace, ni túneles, ni servidores.
 ### Desplegar
 
 1. <https://vercel.com/new> → importar `uptaragua-oficial/bcv-conocimiento-vectorial`.
-2. **Root Directory:** `web`.
+2. **Root Directory:** `web` *(recomendado)*.
 3. **Variable de entorno (opcional):** `GROQ_API_KEY` para respuestas redactadas.
 4. **Deploy.** Listo: el portal funciona sin configurar nada más.
+
+> **También funciona dejando el Root Directory en la raíz del repositorio.**
+> El `vercel.json` de la raíz compila `web/` y los re-exports de `api/*.js`
+> delegan en `web/api/*.js`. Ambas configuraciones están verificadas con
+> `npm run trace` (el corpus entra en el bundle en las dos).
+
+#### Si el build falla con «does not define a top-level app FastAPI instance»
+
+Ese error aparece cuando Vercel construye desde **la raíz del repositorio** y
+detecta el proyecto Python. Ocurre en dos casos:
+
+- **Configura el Root Directory como `web`** (lo más simple), o
+- **Vuelve a desplegar** con el `vercel.json` de la raíz, que fuerza el preset
+  «Other», compila el frontend y expone las funciones de `api/`.
+
+Si el proyecto ya estaba creado con la raíz como Root Directory, basta con
+**redesplegar** para que tome el `vercel.json` nuevo; no hace falta recrearlo.
 
 ### Verificar en local (emula Vercel)
 

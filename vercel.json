@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd web && npm ci",
+  "buildCommand": "cd web && npm run build",
+  "outputDirectory": "web/dist",
+  "functions": {
+    "api/*.js": {
+      "memory": 1024,
+      "maxDuration": 30,
+      "includeFiles": "web/api/_data/**"
+    }
+  }
+}

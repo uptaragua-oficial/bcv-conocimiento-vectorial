@@ -1,0 +1,27 @@
+# Archivos que Vercel no necesita subir (no afectan al despliegue)
+
+# Dependencias y artefactos locales
+.pylibs/
+pylibs/
+web/node_modules/
+web/dist/
+__pycache__/
+**/__pycache__/
+
+# Corpus crudo y procesado (el índice empaquetado vive en web/api/_data)
+data/
+space/bin/
+space/data/
+
+# Herramientas y binarios de desarrollo
+tools/
+*.log
+
+# Documentación y guiones auxiliares
+docs/
+tests/
+.github/
+
+# Entorno
+.env
+.venv/
