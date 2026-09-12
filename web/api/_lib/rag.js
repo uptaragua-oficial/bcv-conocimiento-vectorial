@@ -3,9 +3,13 @@
  *
  * - Recupera fragmentos con BM25 (ver `corpus.js`).
  * - Compone la respuesta citando las fuentes.
- * - Si existe `GROQ_API_KEY`, redacta con un LLM; si no, responde en modo
- *   extractivo. Mismas salvaguardas que el backend Python:
- *   informa (no asesora) y toda afirmación se sustenta en la fuente.
+ * - Si hay clave de un LLM, redacta con él; si no, responde en modo extractivo.
+ *   Mismas salvaguardas que el backend Python: informa (no asesora) y toda
+ *   afirmación se sustenta en la fuente.
+ *
+ * Proveedores soportados (API compatible con OpenAI, se elige por prioridad):
+ *   1. DeepSeek   → DEEPSEEK_API_KEY   (modelo por defecto: deepseek-chat)
+ *   2. Groq       → GROQ_API_KEY       (modelo por defecto: openai/gpt-oss-120b)
  */
 const DISCLAIMER =
   'Este asistente entrega información normativa de fuentes públicas del BCV y no presta asesoría legal ni financiera. Verifique siempre el texto oficial.';
@@ -22,7 +26,27 @@ REGLAS ESTRICTAS:
 5. No prestas asesoría legal ni financiera; solo informas sobre el texto normativo.
 6. Responde en español, de forma clara, breve y ordenada.`;
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+/** Devuelve la configuración del proveedor de LLM disponible, o null. */
+function proveedorLLM() {
+  if (process.env.DEEPSEEK_API_KEY) {
+    const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '')
+    return {
+      nombre: 'deepseek',
+      url: `${base}/chat/completions`,
+      clave: process.env.DEEPSEEK_API_KEY,
+      modelo: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    }
+  }
+  if (process.env.GROQ_API_KEY) {
+    return {
+      nombre: 'groq',
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      clave: process.env.GROQ_API_KEY,
+      modelo: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+    }
+  }
+  return null
+}
 
 function construirContexto(resultados) {
   return resultados
@@ -75,15 +99,15 @@ function respuestaExtractiva(resultados) {
   return partes.join('\n\n');
 }
 
-async function generarGroq(mensaje, contexto, historial) {
-  const resp = await fetch(GROQ_URL, {
+async function generarLLM(proveedor, mensaje, contexto, historial) {
+  const resp = await fetch(proveedor.url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      Authorization: `Bearer ${proveedor.clave}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+      model: proveedor.modelo,
       temperature: 0.1,
       max_tokens: 900,
       messages: [
@@ -93,22 +117,25 @@ async function generarGroq(mensaje, contexto, historial) {
       ],
     }),
   });
-  if (!resp.ok) throw new Error(`Groq HTTP ${resp.status}`);
+  if (!resp.ok) throw new Error(`${proveedor.nombre} HTTP ${resp.status}`);
   const data = await resp.json();
   return (data.choices?.[0]?.message?.content || '').trim();
 }
 
 async function chat({ mensaje, resultados, historial }) {
   const contexto = construirContexto(resultados);
+  const proveedor = proveedorLLM();
   let respuesta;
   let modo = 'extractivo';
+  let modelo = null;
 
-  if (process.env.GROQ_API_KEY) {
+  if (proveedor) {
     try {
-      respuesta = await generarGroq(mensaje, contexto, historial);
-      modo = 'groq';
+      respuesta = await generarLLM(proveedor, mensaje, contexto, historial);
+      modo = proveedor.nombre;
+      modelo = proveedor.modelo;
     } catch (e) {
-      respuesta = `[No se pudo contactar el modelo de lenguaje: ${e.message}]\n\n${respuestaExtractiva(resultados)}`;
+      respuesta = `[No se pudo contactar el modelo de lenguaje (${proveedor.nombre}): ${e.message}]\n\n${respuestaExtractiva(resultados)}`;
     }
   } else {
     respuesta = respuestaExtractiva(resultados);
@@ -118,10 +145,17 @@ async function chat({ mensaje, resultados, historial }) {
     respuesta,
     citas: construirCitas(resultados),
     modo_generacion: modo,
-    modelo: modo === 'groq' ? process.env.GROQ_MODEL || 'openai/gpt-oss-120b' : null,
+    modelo,
     n_fragmentos: resultados.length,
     disclaimer: DISCLAIMER,
   };
 }
 
-export { chat, construirContexto, construirCitas, respuestaExtractiva, DISCLAIMER };
+export {
+  chat,
+  construirContexto,
+  construirCitas,
+  respuestaExtractiva,
+  proveedorLLM,
+  DISCLAIMER,
+};

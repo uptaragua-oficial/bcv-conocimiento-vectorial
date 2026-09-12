@@ -121,3 +121,40 @@ test('POST /api/chat rechaza métodos no permitidos', async () => {
   await chat(peticion({ method: 'DELETE', body: { mensaje: 'consulta válida' } }), res)
   assert.equal(res.statusCode, 405)
 })
+
+// ---------------- Selección de proveedor de LLM ----------------
+test('proveedorLLM prioriza DeepSeek y cae a Groq', async () => {
+  const { proveedorLLM } = await import(join(RAIZ, 'api/_lib/rag.js'))
+  const previo = {
+    deepseek: process.env.DEEPSEEK_API_KEY,
+    groq: process.env.GROQ_API_KEY,
+    modelo: process.env.DEEPSEEK_MODEL,
+  }
+  try {
+    delete process.env.DEEPSEEK_API_KEY
+    delete process.env.GROQ_API_KEY
+    delete process.env.DEEPSEEK_MODEL
+    assert.equal(proveedorLLM(), null)
+
+    process.env.GROQ_API_KEY = 'gsk_prueba'
+    assert.equal(proveedorLLM().nombre, 'groq')
+
+    process.env.DEEPSEEK_API_KEY = 'sk-prueba'
+    const p = proveedorLLM()
+    assert.equal(p.nombre, 'deepseek')
+    assert.equal(p.modelo, 'deepseek-chat')
+    assert.ok(p.url.startsWith('https://api.deepseek.com'))
+
+    process.env.DEEPSEEK_MODEL = 'deepseek-reasoner'
+    assert.equal(proveedorLLM().modelo, 'deepseek-reasoner')
+  } finally {
+    for (const [k, v] of [
+      ['DEEPSEEK_API_KEY', previo.deepseek],
+      ['GROQ_API_KEY', previo.groq],
+      ['DEEPSEEK_MODEL', previo.modelo],
+    ]) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})

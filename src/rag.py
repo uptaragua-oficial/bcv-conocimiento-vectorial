@@ -24,8 +24,44 @@ from datetime import datetime, timezone
 from config import settings
 from src import search
 
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+# Proveedores de LLM soportados (API compatible con OpenAI). Se elige por
+# prioridad: DeepSeek y, si no hay clave, Groq. Sin clave → modo extractivo.
+# Las variables se leen en cada llamada (no al importar) para respetar la
+# configuración del entorno en tiempo de ejecución.
+PROVEEDORES = {
+    "deepseek": {
+        "clave_env": "DEEPSEEK_API_KEY",
+        "url_env": "DEEPSEEK_BASE_URL",
+        "url_default": "https://api.deepseek.com",
+        "modelo_env": "DEEPSEEK_MODEL",
+        "modelo_default": "deepseek-chat",
+    },
+    "groq": {
+        "clave_env": "GROQ_API_KEY",
+        "url_env": "GROQ_BASE_URL",
+        "url_default": "https://api.groq.com/openai/v1",
+        "modelo_env": "GROQ_MODEL",
+        "modelo_default": "openai/gpt-oss-120b",
+    },
+}
+
+
+def proveedor_llm() -> dict | None:
+    """Devuelve la configuración del proveedor disponible, o ``None``."""
+    for nombre in ("deepseek", "groq"):
+        cfg = PROVEEDORES[nombre]
+        clave = os.getenv(cfg["clave_env"])
+        if not clave:
+            continue
+        base = os.getenv(cfg["url_env"], cfg["url_default"]).rstrip("/")
+        return {
+            "nombre": nombre,
+            "clave": clave,
+            "url": f"{base}/chat/completions",
+            "modelo": os.getenv(cfg["modelo_env"], cfg["modelo_default"]),
+        }
+    return None
+
 
 DISCLAIMER = (
     "Este asistente entrega información normativa de fuentes públicas del BCV "
@@ -82,8 +118,9 @@ def construir_citas(resultados: list[dict]) -> list[dict]:
 # ----------------------------------------------------------------------
 # Generación
 # ----------------------------------------------------------------------
-def groq_disponible() -> bool:
-    return bool(os.getenv("GROQ_API_KEY"))
+def llm_disponible() -> bool:
+    """Indica si hay algún proveedor de LLM configurado."""
+    return proveedor_llm() is not None
 
 
 def _historial_mensajes(historial: list[dict] | None) -> list[dict]:
@@ -96,11 +133,11 @@ def _historial_mensajes(historial: list[dict] | None) -> list[dict]:
     return msgs
 
 
-def _generar_groq(mensaje: str, contexto: str, historial: list[dict] | None) -> str:
+def _generar_llm(proveedor: dict, mensaje: str, contexto: str, historial: list[dict] | None) -> str:
     import requests
 
     payload = {
-        "model": GROQ_MODEL,
+        "model": proveedor["modelo"],
         "temperature": 0.1,
         "max_tokens": 900,
         "messages": [
@@ -110,9 +147,9 @@ def _generar_groq(mensaje: str, contexto: str, historial: list[dict] | None) -> 
         ],
     }
     resp = requests.post(
-        GROQ_URL,
+        proveedor["url"],
         headers={
-            "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}",
+            "Authorization": f"Bearer {proveedor['clave']}",
             "Content-Type": "application/json",
         },
         json=payload,
@@ -163,15 +200,18 @@ def chat(
         mensaje, modo=modo, limit=limit, filtros=filtros, rerank=rerank, log=True
     )
     contexto = construir_contexto(resultados)
+    proveedor = proveedor_llm()
 
     modo_gen = "extractivo"
-    if groq_disponible():
+    modelo = None
+    if proveedor:
         try:
-            respuesta = _generar_groq(mensaje, contexto, historial)
-            modo_gen = "groq"
+            respuesta = _generar_llm(proveedor, mensaje, contexto, historial)
+            modo_gen = proveedor["nombre"]
+            modelo = proveedor["modelo"]
         except Exception as exc:  # noqa: BLE001
             respuesta = (
-                f"[No se pudo contactar el modelo de lenguaje: {exc}]\n\n"
+                f"[No se pudo contactar el modelo de lenguaje ({proveedor['nombre']}): {exc}]\n\n"
                 + _respuesta_extractiva(mensaje, resultados)
             )
     else:
@@ -184,7 +224,7 @@ def chat(
         "respuesta": respuesta,
         "citas": construir_citas(resultados),
         "modo_generacion": modo_gen,
-        "modelo": GROQ_MODEL if modo_gen == "groq" else None,
+        "modelo": modelo,
         "n_fragmentos": len(resultados),
         "latencia_ms": round(ms, 1),
         "disclaimer": DISCLAIMER,

@@ -14,7 +14,12 @@ export default function App() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState(null)
   const [filtros, setFiltros] = useState({})
-  const [catalogo, setCatalogo] = useState({ tipos_norma: [], materias: [], generacion_llm: false })
+  const [catalogo, setCatalogo] = useState({
+    tipos_norma: [],
+    materias: [],
+    generacion_llm: false,
+    proveedor_llm: null,
+  })
   const [estado, setEstado] = useState(null)
   const [configAbierto, setConfigAbierto] = useState(false)
   const finRef = useRef(null)
@@ -96,7 +101,9 @@ export default function App() {
               {estado?.status === 'ok' ? 'Servicio activo' : 'Servicio no disponible'}
             </span>
             <span className="rounded-full bg-white/15 px-2 py-1">
-              {catalogo.generacion_llm ? 'Respuestas con LLM' : 'Modo extractivo'}
+              {catalogo.generacion_llm
+                ? `LLM · ${catalogo.proveedor_llm || 'activo'}`
+                : 'Modo extractivo'}
             </span>
             <button
               onClick={() => setConfigAbierto((v) => !v)}

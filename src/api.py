@@ -176,10 +176,13 @@ def catalogo():
                     materias.add(p["materia"])
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=503, detail=f"Weaviate no disponible: {exc}") from exc
+    proveedor = rag.proveedor_llm()
     return {
         "tipos_norma": sorted(tipos),
         "materias": sorted(materias),
-        "generacion_llm": rag.groq_disponible(),
+        "generacion_llm": proveedor is not None,
+        "proveedor_llm": proveedor["nombre"] if proveedor else None,
+        "modelo_llm": proveedor["modelo"] if proveedor else None,
     }
 
 

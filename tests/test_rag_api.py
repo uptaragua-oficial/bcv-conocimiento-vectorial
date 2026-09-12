@@ -113,3 +113,30 @@ def test_chat_rechaza_modo_invalido(cliente):
 def test_chat_valida_mensaje_minimo(cliente):
     r = cliente.post("/chat", json={"mensaje": ""})
     assert r.status_code == 422
+
+
+# ---------------- Selección de proveedor de LLM ----------------
+def test_proveedor_llm_sin_claves(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    assert rag.proveedor_llm() is None
+    assert rag.llm_disponible() is False
+
+
+def test_proveedor_llm_prioriza_deepseek(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_prueba")
+    assert rag.proveedor_llm()["nombre"] == "groq"
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-prueba")
+    p = rag.proveedor_llm()
+    assert p["nombre"] == "deepseek"
+    assert p["modelo"] == "deepseek-chat"
+    assert p["url"].startswith("https://api.deepseek.com")
+    assert rag.llm_disponible() is True
+
+
+def test_proveedor_llm_respeta_modelo_configurado(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-prueba")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-reasoner")
+    assert rag.proveedor_llm()["modelo"] == "deepseek-reasoner"

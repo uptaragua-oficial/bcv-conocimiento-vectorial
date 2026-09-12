@@ -17,7 +17,7 @@ No requiere HuggingFace, ni túneles, ni servidores.
 │                              └───────────┬────────────┘  │
 └──────────────────────────────────────────┼───────────────┘
                                            ▼
-                                  Groq API (opcional, LLM)
+                            DeepSeek / Groq API (opcional, LLM)
 ```
 
 - **Recuperación:** BM25 en JavaScript puro (índice construido en ~80 ms;
@@ -33,7 +33,8 @@ No requiere HuggingFace, ni túneles, ni servidores.
 
 1. <https://vercel.com/new> → importar `uptaragua-oficial/bcv-conocimiento-vectorial`.
 2. **Root Directory:** `web` *(recomendado)*.
-3. **Variable de entorno (opcional):** `GROQ_API_KEY` para respuestas redactadas.
+3. **Variable de entorno (opcional):** `DEEPSEEK_API_KEY` para respuestas redactadas
+   (si prefieres Groq, usa `GROQ_API_KEY`; se elige DeepSeek primero).
 4. **Deploy.** Listo: el portal funciona sin configurar nada más.
 
 > **También funciona dejando el Root Directory en la raíz del repositorio.**
@@ -162,11 +163,12 @@ En **Settings → Variables and secrets**:
 
 | Secreto | Valor |
 |---|---|
-| `GROQ_API_KEY` | Tu clave de <https://console.groq.com/keys> |
-| `GROQ_MODEL` | `openai/gpt-oss-120b` (opcional) |
+| `DEEPSEEK_API_KEY` | Tu clave de <https://platform.deepseek.com/api_keys> |
+| `DEEPSEEK_MODEL` | `deepseek-chat` (opcional) |
+| `GROQ_API_KEY` | Alternativa a DeepSeek: <https://console.groq.com/keys> |
 | `CORS_ORIGINS` | La URL de tu app en Vercel (opcional; por defecto `*`) |
 
-Sin `GROQ_API_KEY` el asistente funciona en **modo extractivo** (devuelve los
+Sin ninguna clave el asistente funciona en **modo extractivo** (devuelve los
 fragmentos normativos con sus citas).
 
 ### 2.4 Verificar

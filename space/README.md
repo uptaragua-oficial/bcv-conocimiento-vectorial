@@ -41,9 +41,13 @@ desplegado en Vercel.
 
 | Secreto | Obligatorio | Descripción |
 |---|---|---|
-| `GROQ_API_KEY` | No | Activa la generación con LLM (Groq, capa gratuita) |
-| `GROQ_MODEL` | No | Modelo a usar (por defecto `openai/gpt-oss-120b`) |
+| `DEEPSEEK_API_KEY` | No | Activa la generación con LLM (DeepSeek) |
+| `DEEPSEEK_MODEL` | No | Modelo a usar (por defecto `deepseek-chat`) |
+| `GROQ_API_KEY` | No | Alternativa a DeepSeek (Groq) |
 | `CORS_ORIGINS` | No | Orígenes permitidos; por defecto `*` |
+
+Sin ninguna clave el asistente responde en **modo extractivo**: devuelve los
+fragmentos normativos recuperados con sus citas.
 
 ## Corpus
 
