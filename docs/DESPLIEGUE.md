@@ -54,6 +54,54 @@ detecta el proyecto Python. Ocurre en dos casos:
 Si el proyecto ya estaba creado con la raíz como Root Directory, basta con
 **redesplegar** para que tome el `vercel.json` nuevo; no hace falta recrearlo.
 
+### Búsqueda semántica en Vercel (opcional)
+
+El modo nativo funciona solo con BM25. Para pasar a **búsqueda híbrida**
+(BM25 + similitud coseno) **sin backend dedicado**:
+
+1. **Vectoriza el corpus una sola vez**, fuera de línea:
+
+   ```bash
+   export EMBEDDINGS_API_KEY=sk-...          # o OPENAI_API_KEY
+   python -m scripts.export_openai_embeddings
+   ```
+
+   Genera `web/api/_data/vectors.f32` y `embeddings_meta.json`. El orden de los
+   vectores coincide con el de `corpus.json`, que es lo que garantiza que el
+   coseno apunte al fragmento correcto. Commitea ambos archivos.
+
+2. **Configura las mismas variables en Vercel.** El modelo debe coincidir con el
+   usado al vectorizar, o el sistema cae a BM25 avisando por consola:
+
+   | Variable | Valor |
+   |---|---|
+   | `EMBEDDINGS_API_KEY` | tu clave |
+   | `EMBEDDINGS_BASE_URL` | `https://api.openai.com/v1` (por defecto) |
+   | `EMBEDDINGS_MODEL` | `text-embedding-3-small` (por defecto) |
+
+3. **Redespliega.** `/api/health` y `/api/catalogo` indicarán
+   `recuperacion: hibrida`, y el portal mostrará «Búsqueda híbrida».
+
+> La consulta se vectoriza **dentro de la función serverless** con una llamada
+> HTTP al proveedor; los vectores del corpus ya están calculados. Si no hay
+> clave, vectores, o el modelo no coincide, la búsqueda vuelve a BM25
+> automáticamente y sin errores.
+
+#### Probar sin gastar créditos
+
+El repositorio incluye un servidor de embeddings simulado:
+
+```bash
+cd web && npm run mock:embeddings     # http://127.0.0.1:9999 (8 dims)
+
+EMBEDDINGS_API_KEY=test \
+EMBEDDINGS_BASE_URL=http://127.0.0.1:9999/v1 \
+EMBEDDINGS_MODEL=mock-model \
+python -m scripts.export_openai_embeddings
+```
+
+> **No commitees** los vectores así generados: son de prueba. Bórralos después.
+
 ### Verificar en local (emula Vercel)
 
 ```bash

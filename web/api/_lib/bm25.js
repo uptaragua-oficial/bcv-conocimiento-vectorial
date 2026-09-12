@@ -69,11 +69,16 @@ function fila(doc, score) {
 function buscar(indice, consulta, opciones = {}) {
   const limit = Math.min(Math.max(opciones.limit || 5, 1), 50);
   const filtros = opciones.filtros || null;
-  const terminos = tokenizar(consulta);
-  if (!terminos.length) return [];
+  if (!tokenizar(consulta).length) return [];
 
+  const scores = puntajesBm25(indice, consulta);
+  return mejores(indice, scores, limit, filtros);
+}
+
+/** Puntajes BM25 crudos de todos los documentos (sin filtrar ni ordenar). */
+function puntajesBm25(indice, consulta) {
   const scores = new Float64Array(indice.n);
-  for (const t of terminos) {
+  for (const t of tokenizar(consulta)) {
     const peso = idf(indice, t);
     if (peso <= 0) continue;
     for (let i = 0; i < indice.n; i++) {
@@ -83,10 +88,14 @@ function buscar(indice, consulta, opciones = {}) {
       scores[i] += (peso * (f * (K1 + 1))) / (f + K1 * norma);
     }
   }
+  return scores;
+}
 
+/** Filtra, ordena y devuelve los `limit` mejores a partir de unos puntajes. */
+function mejores(indice, scores, limit, filtros) {
   const candidatos = [];
   for (let i = 0; i < indice.n; i++) {
-    if (scores[i] <= 0) continue;
+    if (!(scores[i] > 0)) continue;
     if (filtros) {
       const d = indice.docs[i];
       if (filtros.materia && d[4] !== filtros.materia) continue;
@@ -112,4 +121,4 @@ function catalogo(indice) {
   };
 }
 
-export { tokenizar, construir, buscar, catalogo, fila };
+export { tokenizar, construir, buscar, puntajesBm25, mejores, catalogo, fila };

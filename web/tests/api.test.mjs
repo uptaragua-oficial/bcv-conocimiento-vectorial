@@ -72,16 +72,17 @@ test('OPTIONS responde preflight con CORS', () => {
   assert.equal(res.headers['access-control-allow-origin'], '*')
 })
 
-test('POST /api/search recupera y respeta filtros', () => {
+test('POST /api/search recupera y respeta filtros', async () => {
   const res = mockRes()
-  search(peticion({ method: 'POST', body: { query: 'operadores cambiarios', limit: 3 } }), res)
+  await search(peticion({ method: 'POST', body: { query: 'operadores cambiarios', limit: 3 } }), res)
   assert.equal(res.statusCode, 200)
   assert.equal(res.body.n, 3)
   assert.ok(res.body.resultados[0].score > 0)
   assert.ok(res.body.resultados[0].fuente_url)
+  assert.ok(['keyword', 'hibrida'].includes(res.body.modo))
 
   const conFiltro = mockRes()
-  search(
+  await search(
     peticion({ method: 'POST', body: { query: 'encaje', limit: 5, filtros: { materia: 'Encaje legal' } } }),
     conFiltro,
   )
@@ -91,10 +92,17 @@ test('POST /api/search recupera y respeta filtros', () => {
   }
 })
 
-test('POST /api/search exige query', () => {
+test('POST /api/search exige query', async () => {
   const res = mockRes()
-  search(peticion({ method: 'POST', body: {} }), res)
+  await search(peticion({ method: 'POST', body: {} }), res)
   assert.equal(res.statusCode, 422)
+})
+
+test('el modo de recuperación coincide con la disponibilidad de embeddings', async () => {
+  const { semanticaDisponible } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
+  const res = mockRes()
+  await search(peticion({ method: 'POST', body: { query: 'mesas de cambio', limit: 2 } }), res)
+  assert.equal(res.body.modo, semanticaDisponible() ? 'hibrida' : 'keyword')
 })
 
 test('POST /api/chat devuelve respuesta citada', async () => {
@@ -163,5 +171,51 @@ test('proveedorLLM prioriza DeepSeek y cae a Groq', async () => {
       if (v === undefined) delete process.env[k]
       else process.env[k] = v
     }
+  }
+})
+
+// ---------------- Embeddings (búsqueda semántica) ----------------
+test('embeddingsConfig usa OpenAI por defecto y admite otros proveedores', async () => {
+  const { embeddingsConfig } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
+  const claves = ['EMBEDDINGS_API_KEY', 'OPENAI_API_KEY', 'EMBEDDINGS_MODEL', 'EMBEDDINGS_BASE_URL']
+  const previo = Object.fromEntries(claves.map((k) => [k, process.env[k]]))
+  try {
+    claves.forEach((k) => delete process.env[k])
+    assert.equal(embeddingsConfig(), null, 'sin clave no hay embeddings')
+
+    process.env.OPENAI_API_KEY = 'sk-prueba'
+    let cfg = embeddingsConfig()
+    assert.equal(cfg.modelo, 'text-embedding-3-small')
+    assert.ok(cfg.url.startsWith('https://api.openai.com/v1'))
+
+    process.env.EMBEDDINGS_MODEL = 'BAAI/bge-m3'
+    process.env.EMBEDDINGS_BASE_URL = 'https://api.deepinfra.com/v1/openai'
+    cfg = embeddingsConfig()
+    assert.equal(cfg.modelo, 'BAAI/bge-m3')
+    assert.ok(cfg.url.startsWith('https://api.deepinfra.com/v1/openai'))
+    assert.ok(cfg.url.endsWith('/embeddings'))
+  } finally {
+    for (const [k, v] of Object.entries(previo)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})
+
+test('normalizarL2 deja el vector con norma unitaria', async () => {
+  const { normalizarL2 } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
+  const v = normalizarL2(Float32Array.from([3, 4]))
+  assert.ok(Math.abs(Math.hypot(...v) - 1) < 1e-6)
+  assert.ok(Math.abs(v[0] - 0.6) < 1e-6)
+  assert.ok(Math.abs(v[1] - 0.8) < 1e-6)
+})
+
+test('sin vectores del corpus, la búsqueda cae a BM25', async () => {
+  const { vectoresCorpus, metaVectores } = await import(join(RAIZ, 'api/_lib/embeddings.js'))
+  // En el repositorio no se versionan vectores hasta vectorizar el corpus.
+  if (metaVectores()) {
+    assert.ok(vectoresCorpus(), 'si hay meta debe haber vectores')
+  } else {
+    assert.equal(vectoresCorpus(), null)
   }
 })

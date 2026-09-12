@@ -1,5 +1,11 @@
-/** GET/POST /api/chat — asistente conversacional (modo nativo de Vercel). */
-import { buscarCorpus } from './_lib/corpus.js'
+/**
+ * GET/POST /api/chat — asistente conversacional (modo nativo de Vercel).
+ *
+ * Recupera con búsqueda híbrida (BM25 + embeddings cuando están disponibles),
+ * compone la respuesta con citas y, si hay proveedor de LLM, la redacta.
+ * El campo `recuperacion` indica qué estrategia se usó.
+ */
+import { buscarHibrido } from './_lib/corpus.js'
 import { chat } from './_lib/rag.js'
 import { preflight, parametros, normalizarFiltros } from './_lib/http.js'
 
@@ -18,12 +24,18 @@ export default async function handler(req, res) {
 
   const limit = Math.min(Math.max(Number(p.limit) || 5, 1), 10)
   const filtros = normalizarFiltros(p.filtros)
+  const alpha = p.alpha === undefined ? 0.5 : Number(p.alpha)
   const t0 = Date.now()
 
   try {
-    const resultados = buscarCorpus(mensaje, { limit, filtros })
+    const { resultados, modo } = await buscarHibrido(mensaje, { limit, filtros, alpha })
     const salida = await chat({ mensaje, resultados, historial: p.historial })
-    return res.status(200).json({ ...salida, latencia_ms: Date.now() - t0 })
+    return res.status(200).json({
+      ...salida,
+      recuperacion: modo,
+      alpha: modo === 'hibrida' ? alpha : null,
+      latencia_ms: Date.now() - t0,
+    })
   } catch (e) {
     return res.status(503).json({ detail: `Error del asistente: ${e.message}` })
   }

@@ -105,6 +105,9 @@ export default function App() {
                 ? `LLM · ${catalogo.proveedor_llm || 'activo'}`
                 : 'Modo extractivo'}
             </span>
+            <span className="rounded-full bg-white/15 px-2 py-1">
+              {catalogo.recuperacion === 'hibrida' ? 'Búsqueda híbrida' : 'Búsqueda BM25'}
+            </span>
             <button
               onClick={() => setConfigAbierto((v) => !v)}
               title="Configurar la dirección del backend"
