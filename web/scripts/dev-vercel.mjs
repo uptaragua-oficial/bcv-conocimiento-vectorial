@@ -16,9 +16,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname } from 'node:path'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
-const RAIZ = join(AQUI, '..')
-const DIST = join(RAIZ, 'dist')
-const PUERTO = Number(process.env.PORT || 3000)
+const WEB = join(AQUI, '..')
+const REPO = join(WEB, '..')
+
+// Modo raíz: replica un despliegue con Root Directory = repositorio
+// (funciones en `api/` de la raíz, estáticos en `web/dist`).
+const MODO_RAIZ = process.env.MODO_RAIZ === '1' || process.argv.includes('--raiz')
+const DIST = join(WEB, 'dist')
+const DIR_API = MODO_RAIZ ? join(REPO, 'api') : join(WEB, 'api')
+const PUERTO = Number(process.env.PORT || (MODO_RAIZ ? 3001 : 3000))
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -62,7 +68,7 @@ const servidor = createServer(async (req, res) => {
   if (ruta.startsWith('/api/')) {
     const nombre = ruta.slice(5).replace(/\/+$/, '') || 'index'
     try {
-      const modulo = await import(pathToFileURL(join(RAIZ, 'api', `${nombre}.js`)).href)
+      const modulo = await import(pathToFileURL(join(DIR_API, `${nombre}.js`)).href)
       const handler = modulo.default
       if (typeof handler !== 'function') throw new Error('sin export default')
       req.query = Object.fromEntries(url.searchParams.entries())
@@ -96,6 +102,7 @@ const servidor = createServer(async (req, res) => {
 
 servidor.listen(PUERTO, () => {
   console.log(`Emulador Vercel activo en http://localhost:${PUERTO}`)
+  console.log(`  Modo:     ${MODO_RAIZ ? 'Root Directory = raíz del repositorio' : 'Root Directory = web'}`)
   console.log(`  Frontend: ${DIST}`)
-  console.log(`  API:      ${join(RAIZ, 'api')}`)
+  console.log(`  API:      ${DIR_API}`)
 })
