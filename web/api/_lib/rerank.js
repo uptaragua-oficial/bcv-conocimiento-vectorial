@@ -48,6 +48,22 @@
 /** Recorta el texto enviado al proveedor: acota coste y latencia. */
 const MAX_CARACTERES = 2000
 
+/**
+ * Último error del proveedor de rerank.
+ *
+ * Se guarda para poder mostrarlo desde `/api/health`. Sin esto, cuando el
+ * proveedor rechaza una petición el único rastro queda en los registros de la
+ * función de Vercel, y desde fuera solo se ve que «el rerank no se aplicó»: se
+ * sabe que falla, pero no por qué. La instancia es reutilizada por Vercel, así
+ * que este valor sobrevive entre peticiones de la misma instancia.
+ */
+let ultimoError = null
+
+/** Diagnóstico del último intento de rerank, para `/api/health`. */
+export function rerankUltimoError() {
+  return ultimoError
+}
+
 /** Modelo por defecto de cada proveedor, para no tener que acertarlo a mano. */
 const MODELO_POR_DEFECTO = {
   deepinfra: 'Qwen/Qwen3-Reranker-0.6B',
@@ -215,6 +231,7 @@ export async function reordenar(consulta, items, opciones = {}) {
       body: JSON.stringify(cuerpoPeticion(cfg, consulta, documentos, limit)),
     })
   } catch (e) {
+    ultimoError = { tipo: 'conexion', mensaje: e.message, cuando: new Date().toISOString() }
     console.warn(`[rerank] no se pudo contactar al proveedor: ${e.message}`)
     return null
   }
@@ -226,6 +243,12 @@ export async function reordenar(consulta, items, opciones = {}) {
     } catch {
       /* sin cuerpo legible */
     }
+    ultimoError = {
+      tipo: 'http',
+      codigo: resp.status,
+      mensaje: detalle || `HTTP ${resp.status}`,
+      cuando: new Date().toISOString(),
+    }
     console.warn(`[rerank] HTTP ${resp.status}${detalle ? ` · ${detalle}` : ''}`)
     return null
   }
@@ -234,16 +257,23 @@ export async function reordenar(consulta, items, opciones = {}) {
   try {
     datos = await resp.json()
   } catch {
+    ultimoError = { tipo: 'respuesta', mensaje: 'no es JSON', cuando: new Date().toISOString() }
     console.warn('[rerank] respuesta ilegible')
     return null
   }
 
   const puntajes = leerPuntajes(cfg, datos, items.length)
   if (!puntajes) {
+    ultimoError = {
+      tipo: 'respuesta',
+      mensaje: 'sin puntajes utilizables',
+      cuando: new Date().toISOString(),
+    }
     console.warn('[rerank] respuesta sin puntajes utilizables')
     return null
   }
 
+  ultimoError = null
   return items
     .map((item, i) => ({ ...item, rerank_score: puntajes[i] }))
     .sort((a, b) => b.rerank_score - a.rerank_score)

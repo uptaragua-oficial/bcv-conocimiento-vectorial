@@ -222,8 +222,18 @@ def prueba_funcional(base: str, es_nativo: bool, salud: dict) -> tuple[bool, lis
         if salud.get("rerank") and rerank is False:
             fallo(
                 "El rerank figura como activo, pero el proveedor no lo aplicó",
-                "Revisa RERANK_API_KEY y RERANK_API_URL (mira los registros de la función)",
+                "Revisa RERANK_API_KEY, RERANK_API_URL y que RERANK_MODEL no "
+                "tenga un valor de otro proveedor",
             )
+            # El health guarda el motivo exacto que devolvió el proveedor.
+            err = salud.get("rerank_error")
+            if err:
+                print(color(f"      lo que respondió el proveedor: {err.get('mensaje', err)}", GRIS))
+                if err.get("codigo"):
+                    print(color(f"      {_explicar(int(err['codigo']), 'el proveedor de rerank')}", GRIS))
+            cfg = salud.get("rerank_config") or {}
+            if cfg:
+                print(color(f"      configurado: {cfg.get('proveedor')} · {cfg.get('modelo')}", GRIS))
             extra.append("rerank-no-responde")
 
     puesto = None
