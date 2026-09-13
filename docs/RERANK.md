@@ -1,5 +1,7 @@
 # Reordenación con cross-encoder (rerank)
 
+> Contexto general de técnicas y métricas: [`TECNICAS-Y-METRICAS.md`](TECNICAS-Y-METRICAS.md).
+
 Un cross-encoder lee **la consulta y el fragmento juntos** y puntúa cuánto
 responde ese fragmento a esa pregunta. Es más caro que comparar vectores, pero
 mucho más preciso, porque no depende de que ambos textos se parezcan: depende de

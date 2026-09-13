@@ -122,6 +122,14 @@ curl -s -X POST localhost:8000/search -H 'Content-Type: application/json' -d '{
 
 ## 7. Resultados
 
+> **Para la explicación de cada técnica y de cada métrica, con sus definiciones,
+> ver [`docs/TECNICAS-Y-METRICAS.md`](docs/TECNICAS-Y-METRICAS.md).** Las cifras
+> de esta sección son las de la **primera ejecución** del MVP y se conservan como
+> registro histórico; las actuales —corpus ampliado a 2 664 fragmentos y búsqueda
+> con *rerank*— están en
+> [`docs/COMPARATIVA-MODELOS.md`](docs/COMPARATIVA-MODELOS.md) y
+> [`docs/RERANK.md`](docs/RERANK.md).
+
 Ejecución real del MVP sobre el dominio jurídico (ver
 [`docs/INFORME-MVP.md`](docs/INFORME-MVP.md) para el detalle):
 
@@ -147,7 +155,22 @@ Artefactos: `data/index/evaluation_report.json` (métricas) y
 
 ---
 
-## 8. Alcance y límites del MVP
+## 8. Documentación
+
+| Documento | Contenido |
+|---|---|
+| [`docs/TECNICAS-Y-METRICAS.md`](docs/TECNICAS-Y-METRICAS.md) | **Técnicas de búsqueda y métricas, cada una definida en el texto** |
+| [`docs/COMPARATIVA-MODELOS.md`](docs/COMPARATIVA-MODELOS.md) | Comparación medida de modelos de *embeddings* |
+| [`docs/RERANK.md`](docs/RERANK.md) | Reordenación con cross-encoder: qué resuelve y qué se midió |
+| [`docs/PROVEEDORES-RERANK.md`](docs/PROVEEDORES-RERANK.md) | DeepInfra frente a Jina: precios, límites y formatos de API |
+| [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) | Despliegue en Vercel y verificación |
+| [`docs/VECTORIZAR.md`](docs/VECTORIZAR.md) | Cómo generar los vectores del corpus |
+| [`docs/ARQUITECTURA-ON-PREMISE.md`](docs/ARQUITECTURA-ON-PREMISE.md) | Despliegue íntegro en infraestructura del BCV |
+| [`docs/INFORME-MVP.md`](docs/INFORME-MVP.md) | Informe de la primera ejecución del MVP |
+
+---
+
+## 9. Alcance y límites del MVP
 
 - Dominio único: **jurídico-normativo** (el resto de dominios queda para fases
   posteriores, según la propuesta).

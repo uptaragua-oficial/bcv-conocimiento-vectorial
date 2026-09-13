@@ -1,5 +1,9 @@
 # Comparativa de modelos de embeddings
 
+> **Este documento solo compara modelos.** Para la explicación de cada técnica de
+> recuperación y de cada métrica —con su definición—, ver
+> [`TECNICAS-Y-METRICAS.md`](TECNICAS-Y-METRICAS.md).
+
 Medición **real** sobre el corpus jurídico del BCV. Todos los modelos se miden
 con el **mismo** conjunto de consultas, derivado de forma determinista del corpus
 (semilla fija), para que la comparación sea justa.
