@@ -143,8 +143,14 @@ def run() -> dict:
         "n": len(vectores),
         "dim": dim,
         "modelo": cfg["modelo"],
-        "url": cfg["url"],
+        # Formato unificado con el resto de exportadores: la función de Vercel
+        # se configura sola a partir de estos campos.
+        "formato": "openai",
+        "prefijo_documento": "",
+        "prefijo_consulta": "",
+        "url_sugerida": cfg["url"],
         "normalizado": "l2",
+        "origen": "calculado por API (compatible con OpenAI)",
         "generado": datetime.now(timezone.utc).isoformat(),
     }
     META.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
