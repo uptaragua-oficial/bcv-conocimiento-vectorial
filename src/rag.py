@@ -51,7 +51,10 @@ def proveedor_llm() -> dict | None:
     """Devuelve la configuración del proveedor disponible, o ``None``."""
     for nombre in ("deepseek", "groq"):
         cfg = PROVEEDORES[nombre]
-        clave = os.getenv(cfg["clave_env"])
+        # ``.strip()`` por si la variable de entorno trae un espacio o salto de
+        # línea final: es la causa más común de un 401 en claves configuradas
+        # desde un panel web.
+        clave = (os.getenv(cfg["clave_env"]) or "").strip()
         if not clave:
             continue
         base = os.getenv(cfg["url_env"], cfg["url_default"]).rstrip("/")
@@ -59,13 +62,13 @@ def proveedor_llm() -> dict | None:
             "nombre": nombre,
             "clave": clave,
             "url": f"{base}/chat/completions",
-            "modelo": os.getenv(cfg["modelo_env"], cfg["modelo_default"]),
+            "modelo": (os.getenv(cfg["modelo_env"]) or cfg["modelo_default"]).strip(),
         }
         if nombre == "deepseek":
             # El modo "thinking" viene activado por defecto (esfuerzo alto):
             # añade latencia y anula `temperature`. Para un asistente con
             # contexto recuperado se desactiva por defecto.
-            proveedor["thinking"] = os.getenv("DEEPSEEK_THINKING", "disabled")
+            proveedor["thinking"] = (os.getenv("DEEPSEEK_THINKING") or "disabled").strip()
         return proveedor
     return None
 
@@ -172,7 +175,19 @@ def _generar_llm(proveedor: dict, mensaje: str, contexto: str, historial: list[d
         json=payload,
         timeout=60,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        # El cuerpo del error explica el motivo real (clave inválida, modelo
+        # inexistente, sin saldo…), mucho más útil que solo el código.
+        detalle = " ".join((resp.text or "").split())[:300]
+        pista = (
+            " · revisa que la clave sea correcta y no tenga espacios al final"
+            if resp.status_code == 401
+            else ""
+        )
+        raise RuntimeError(
+            f"{proveedor['nombre']} HTTP {resp.status_code}"
+            f"{f' · {detalle}' if detalle else ''}{pista}"
+        )
     return resp.json()["choices"][0]["message"]["content"].strip()
 
 

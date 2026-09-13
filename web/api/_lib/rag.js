@@ -33,21 +33,23 @@ function proveedorLLM() {
     return {
       nombre: 'deepseek',
       url: `${base}/chat/completions`,
-      clave: process.env.DEEPSEEK_API_KEY,
+      // .trim() por si la clave se pegó con un espacio o salto de línea final:
+      // es la causa más común de un 401 en variables de entorno.
+      clave: (process.env.DEEPSEEK_API_KEY || '').trim(),
       // Modelos vigentes: deepseek-flash | deepseek-v4-pro
-      modelo: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+      modelo: (process.env.DEEPSEEK_MODEL || 'deepseek-flash').trim(),
       // El modo "thinking" viene activado por defecto (esfuerzo alto): añade
       // latencia y anula `temperature`. Para un asistente con contexto
       // recuperado se desactiva por defecto.
-      thinking: process.env.DEEPSEEK_THINKING || 'disabled',
+      thinking: (process.env.DEEPSEEK_THINKING || 'disabled').trim(),
     }
   }
   if (process.env.GROQ_API_KEY) {
     return {
       nombre: 'groq',
       url: 'https://api.groq.com/openai/v1/chat/completions',
-      clave: process.env.GROQ_API_KEY,
-      modelo: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+      clave: (process.env.GROQ_API_KEY || '').trim(),
+      modelo: (process.env.GROQ_MODEL || 'openai/gpt-oss-120b').trim(),
     }
   }
   return null
@@ -132,7 +134,21 @@ async function generarLLM(proveedor, mensaje, contexto, historial) {
     },
     body: JSON.stringify(cuerpo),
   })
-  if (!resp.ok) throw new Error(`${proveedor.nombre} HTTP ${resp.status}`);
+  if (!resp.ok) {
+    // Incluir el cuerpo del error: la API explica el motivo (clave inválida,
+    // modelo inexistente, sin saldo…), mucho más útil que solo el código.
+    let detalle = '';
+    try {
+      detalle = (await resp.text()).replace(/\s+/g, ' ').slice(0, 300);
+    } catch {
+      /* sin cuerpo */
+    }
+    const pista =
+      resp.status === 401
+        ? ' · revisa que la clave sea correcta y no tenga espacios al final'
+        : '';
+    throw new Error(`${proveedor.nombre} HTTP ${resp.status}${detalle ? ` · ${detalle}` : ''}${pista}`);
+  }
   const data = await resp.json();
   return (data.choices?.[0]?.message?.content || '').trim();
 }
