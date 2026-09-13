@@ -1,5 +1,13 @@
 # Opciones de alojamiento del backend
 
+> **Si lo que se evalúa es desplegar todo en infraestructura propia**, este no es
+> el documento: ver [`ARQUITECTURA-ON-PREMISE.md`](ARQUITECTURA-ON-PREMISE.md),
+> que trata la arquitectura, el dimensionamiento de GPU y el plan por fases para
+> un despliegue íntegro dentro del BCV.
+>
+> Lo que sigue compara alternativas de **alojamiento en la nube**, partiendo de
+> la restricción que se encontró con HuggingFace.
+
 El portal (Vercel) es estático; necesita un **backend** que ejecute Weaviate,
 BGE-M3 y la API FastAPI. Este documento compara las alternativas reales,
 medidas contra lo que ya está construido y probado.
