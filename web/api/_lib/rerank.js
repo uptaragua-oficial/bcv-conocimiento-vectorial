@@ -45,6 +45,8 @@
  *   RERANK_INSTRUCTION solo DeepInfra: instrucción que orienta la tarea
  */
 
+import { claveDeEntorno } from './claves.js'
+
 /** Recorta el texto enviado al proveedor: acota coste y latencia. */
 const MAX_CARACTERES = 2000
 
@@ -141,7 +143,7 @@ export function rerankConfig() {
     modelo,
     formato,
     proveedor,
-    clave: (process.env.RERANK_API_KEY || '').trim(),
+    clave: claveDeEntorno('RERANK_API_KEY'),
     candidatos: Number.isFinite(candidatos) ? Math.min(Math.max(candidatos, 10), 100) : 30,
     instruccion: (process.env.RERANK_INSTRUCTION || '').trim(),
   }

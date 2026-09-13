@@ -26,18 +26,7 @@ REGLAS ESTRICTAS:
 5. No prestas asesoría legal ni financiera; solo informas sobre el texto normativo.
 6. Responde en español, de forma clara, breve y ordenada.`;
 
-/**
- * Limpia una clave leída de una variable de entorno.
- *
- * Los paneles web suelen añadir espacios, saltos de línea o comillas al pegar.
- * Cualquiera de esas cosas produce un 401 aunque la clave sea correcta.
- */
-function limpiarClave(valor) {
-  return String(valor || '')
-    .trim()
-    .replace(/^["'`]+|["'`]+$/g, '')
-    .trim()
-}
+import { limpiarClave } from './claves.js'
 
 /** Prefijo esperado de la clave de cada proveedor. */
 const PREFIJO_CLAVE = { deepseek: 'sk-', groq: 'gsk_' }

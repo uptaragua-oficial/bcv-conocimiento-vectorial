@@ -396,3 +396,38 @@ test('si el rerank está configurado pero falla, la respuesta lo dice', async ()
     }
   }
 })
+
+test('las claves se limpian igual en las tres rutas', async () => {
+  // Pegar una clave con comillas o con un salto de línea produce un 401 aunque
+  // la clave sea correcta. Estaba resuelto solo para el LLM: el rerank no
+  // quitaba comillas y los embeddings no recortaban ni los espacios.
+  const { limpiarClave, claveDeEntorno } = await import(join(RAIZ, 'api/_lib/claves.js'))
+
+  assert.equal(limpiarClave('  hf_abc  '), 'hf_abc')
+  assert.equal(limpiarClave('"jina_abc"'), 'jina_abc')
+  assert.equal(limpiarClave("'jina_abc'"), 'jina_abc')
+  assert.equal(limpiarClave('`sk-abc`'), 'sk-abc')
+  assert.equal(limpiarClave('jina_abc\n'), 'jina_abc')
+  assert.equal(limpiarClave('jina_abc'), 'jina_abc')
+  assert.equal(limpiarClave(undefined), '')
+  assert.equal(limpiarClave(null), '')
+
+  process.env.CLAVE_DE_PRUEBA = '"  con-comillas  "'
+  assert.equal(claveDeEntorno('CLAVE_DE_PRUEBA'), 'con-comillas')
+  assert.equal(claveDeEntorno('NO_EXISTE_ESTA_VARIABLE'), '')
+  delete process.env.CLAVE_DE_PRUEBA
+
+  // Y que cada ruta la use: el rerank y los embeddings, no solo el LLM.
+  const rerank = await import(join(RAIZ, 'api/_lib/rerank.js'))
+  const embeddings = await import(join(RAIZ, 'api/_lib/embeddings.js'))
+  const previo = process.env.RERANK_API_URL
+  process.env.RERANK_API_URL = 'https://api.jina.ai/v1/rerank'
+  process.env.RERANK_API_KEY = '"jina_con_comillas"'
+  assert.equal(rerank.rerankConfig().clave, 'jina_con_comillas')
+  process.env.EMBEDDINGS_API_KEY = '  hf_con_espacios  '
+  assert.equal(embeddings.embeddingsConfig().clave, 'hf_con_espacios')
+  delete process.env.EMBEDDINGS_API_KEY
+  delete process.env.RERANK_API_KEY
+  if (previo === undefined) delete process.env.RERANK_API_URL
+  else process.env.RERANK_API_URL = previo
+})

@@ -19,6 +19,8 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { claveDeEntorno } from './claves.js'
+
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const RUTA_VECTORES = join(AQUI, '..', '_data', 'vectors.f32')
 const RUTA_META = join(AQUI, '..', '_data', 'embeddings_meta.json')
@@ -41,7 +43,8 @@ export function metaVectores() {
 
 /** Configuración del proveedor de embeddings, o null si no hay clave. */
 export function embeddingsConfig() {
-  const clave = process.env.EMBEDDINGS_API_KEY || process.env.OPENAI_API_KEY
+  const clave =
+    claveDeEntorno('EMBEDDINGS_API_KEY') || claveDeEntorno('OPENAI_API_KEY')
   if (!clave) return null
 
   const meta = metaVectores()
