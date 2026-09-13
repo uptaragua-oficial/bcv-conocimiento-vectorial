@@ -300,3 +300,51 @@ test('los vectores del corpus son coherentes con su meta', async () => {
     assert.equal(vectoresCorpus(), null)
   }
 })
+
+// ---------------- Limpieza de la clave y diagnóstico ----------------
+test('la clave se limpia de espacios, saltos de línea y comillas', async () => {
+  const { proveedorLLM } = await import(join(RAIZ, 'api/_lib/rag.js'))
+  const claves = ['DEEPSEEK_API_KEY', 'GROQ_API_KEY']
+  const previo = Object.fromEntries(claves.map((k) => [k, process.env[k]]))
+  try {
+    delete process.env.GROQ_API_KEY
+    process.env.DEEPSEEK_API_KEY = '  "sk-prueba-123"  \n'
+    assert.equal(proveedorLLM().clave, 'sk-prueba-123')
+
+    process.env.DEEPSEEK_API_KEY = "\n'sk-otra'\t"
+    assert.equal(proveedorLLM().clave, 'sk-otra')
+  } finally {
+    for (const [k, v] of Object.entries(previo)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})
+
+test('diagnosticoLLM detecta una clave del proveedor equivocado', async () => {
+  const { diagnosticoLLM } = await import(join(RAIZ, 'api/_lib/rag.js'))
+  const claves = ['DEEPSEEK_API_KEY', 'GROQ_API_KEY']
+  const previo = Object.fromEntries(claves.map((k) => [k, process.env[k]]))
+  try {
+    delete process.env.DEEPSEEK_API_KEY
+    delete process.env.GROQ_API_KEY
+    assert.deepEqual(diagnosticoLLM(), { configurado: false })
+
+    // Clave de Groq guardada por error en la variable de DeepSeek
+    process.env.DEEPSEEK_API_KEY = 'gsk_clave_de_groq'
+    const malo = diagnosticoLLM()
+    assert.equal(malo.proveedor, 'deepseek')
+    assert.equal(malo.clave_prefijo_esperado, 'sk-')
+    assert.equal(malo.clave_prefijo_valido, false)
+
+    process.env.DEEPSEEK_API_KEY = 'sk-clave-correcta'
+    const bueno = diagnosticoLLM()
+    assert.equal(bueno.clave_prefijo_valido, true)
+    assert.equal(bueno.clave_longitud, 'sk-clave-correcta'.length)
+  } finally {
+    for (const [k, v] of Object.entries(previo)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})

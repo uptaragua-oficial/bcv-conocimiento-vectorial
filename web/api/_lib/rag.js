@@ -26,6 +26,22 @@ REGLAS ESTRICTAS:
 5. No prestas asesoría legal ni financiera; solo informas sobre el texto normativo.
 6. Responde en español, de forma clara, breve y ordenada.`;
 
+/**
+ * Limpia una clave leída de una variable de entorno.
+ *
+ * Los paneles web suelen añadir espacios, saltos de línea o comillas al pegar.
+ * Cualquiera de esas cosas produce un 401 aunque la clave sea correcta.
+ */
+function limpiarClave(valor) {
+  return String(valor || '')
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim()
+}
+
+/** Prefijo esperado de la clave de cada proveedor. */
+const PREFIJO_CLAVE = { deepseek: 'sk-', groq: 'gsk_' }
+
 /** Devuelve la configuración del proveedor de LLM disponible, o null. */
 function proveedorLLM() {
   if (process.env.DEEPSEEK_API_KEY) {
@@ -33,9 +49,7 @@ function proveedorLLM() {
     return {
       nombre: 'deepseek',
       url: `${base}/chat/completions`,
-      // .trim() por si la clave se pegó con un espacio o salto de línea final:
-      // es la causa más común de un 401 en variables de entorno.
-      clave: (process.env.DEEPSEEK_API_KEY || '').trim(),
+      clave: limpiarClave(process.env.DEEPSEEK_API_KEY),
       // Modelos vigentes: deepseek-flash | deepseek-v4-pro
       modelo: (process.env.DEEPSEEK_MODEL || 'deepseek-flash').trim(),
       // El modo "thinking" viene activado por defecto (esfuerzo alto): añade
@@ -48,11 +62,30 @@ function proveedorLLM() {
     return {
       nombre: 'groq',
       url: 'https://api.groq.com/openai/v1/chat/completions',
-      clave: (process.env.GROQ_API_KEY || '').trim(),
+      clave: limpiarClave(process.env.GROQ_API_KEY),
       modelo: (process.env.GROQ_MODEL || 'openai/gpt-oss-120b').trim(),
     }
   }
   return null
+}
+
+/**
+ * Diagnóstico seguro de la configuración del LLM: **no** expone la clave, solo
+ * si su formato parece el correcto. Sirve para detectar el error más común:
+ * haber guardado una clave de otro proveedor en la variable equivocada.
+ */
+function diagnosticoLLM() {
+  const p = proveedorLLM()
+  if (!p) return { configurado: false }
+  const esperado = PREFIJO_CLAVE[p.nombre] || ''
+  return {
+    configurado: true,
+    proveedor: p.nombre,
+    modelo: p.modelo,
+    clave_longitud: p.clave.length,
+    clave_prefijo_esperado: esperado,
+    clave_prefijo_valido: p.clave.startsWith(esperado),
+  }
 }
 
 function construirContexto(resultados) {
@@ -188,5 +221,6 @@ export {
   construirCitas,
   respuestaExtractiva,
   proveedorLLM,
+  diagnosticoLLM,
   DISCLAIMER,
 };
