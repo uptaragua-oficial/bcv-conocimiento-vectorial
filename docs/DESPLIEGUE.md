@@ -12,8 +12,8 @@ No requiere HuggingFace, ni túneles, ni servidores.
 │                        VERCEL                            │
 │  ┌────────────────────┐      ┌────────────────────────┐  │
 │  │ SPA React + Vite   │─────►│  /api/chat  /api/search │  │
-│  │ (estático)         │      │  BM25 sobre el corpus   │  │
-│  └────────────────────┘      │  (2 083 fragmentos)     │  │
+│  │ (estático)         │      │  BM25 + híbrida sobre   │  │
+│  └────────────────────┘      │  el corpus (2 664 frag.)│  │
 │                              └───────────┬────────────┘  │
 └──────────────────────────────────────────┼───────────────┘
                                            ▼
@@ -21,9 +21,10 @@ No requiere HuggingFace, ni túneles, ni servidores.
 ```
 
 - **Recuperación:** BM25 en JavaScript puro (índice construido en ~80 ms;
-  búsqueda en 1–3 ms). Se eligió por evidencia: en la evaluación del corpus,
-  BM25 obtuvo el mejor nDCG@5 (0.863) frente a la semántica (0.524) y la
-  híbrida (0.844).
+  búsqueda en 1–3 ms). Si se configuran embeddings, se fusiona con la similitud
+  coseno (híbrida, α=0.5); en la evaluación del corpus actual la híbrida obtuvo
+  **0.884 nDCG@5** frente a **0.862** de BM25 y **0.394** de la densa sola. Sin
+  proveedor de embeddings, el portal funciona igual: cae a BM25.
 - **Ventaja:** costo cero, sin servidores, arranque inmediato, sin límites de
   memoria para el modelo de embeddings.
 - **Costo:** no incluye búsqueda densa con BGE-M3 ni Weaviate (disponibles en
