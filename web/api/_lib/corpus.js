@@ -83,7 +83,7 @@ export async function buscarHibrido(consulta, opciones = {}) {
 
   const lexicos = puntajesBm25(indice, consulta)
   let vector = null
-  if (semanticaDisponible()) {
+  if (semanticaDisponible() && vectoresAlineados()) {
     try {
       vector = await embeberConsulta(consulta)
     } catch (e) {
@@ -113,6 +113,26 @@ export async function buscarHibrido(consulta, opciones = {}) {
     alpha,
     ms_vector: Date.now() - t0,
   }
+}
+
+/**
+ * ¿Los vectores corresponden al corpus actual?
+ *
+ * Si el corpus crece (nuevas normas) y no se re-vectoriza, la matriz quedaría
+ * más corta que el índice y la similitud coseno leería fuera de rango,
+ * asignando 0 a los fragmentos nuevos. Es mejor detectarlo y usar BM25.
+ */
+export function vectoresAlineados() {
+  const v = vectoresCorpus()
+  if (!v) return false
+  const alineados = v.n === getIndice().n
+  if (!alineados) {
+    console.warn(
+      `[corpus] vectores desalineados: ${v.n} vectores para ${getIndice().n} fragmentos. ` +
+        `Re-vectoriza el corpus; mientras tanto se usa solo BM25.`,
+    )
+  }
+  return alineados
 }
 
 export function catalogoCorpus() {

@@ -6,7 +6,7 @@
  * portal: guardar una clave de otro proveedor, o pegarla incompleta, en la
  * variable equivocada.
  */
-import { totalFragmentos } from './_lib/corpus.js'
+import { totalFragmentos, vectoresAlineados } from './_lib/corpus.js'
 import { embeddingsConfig, semanticaDisponible, metaVectores } from './_lib/embeddings.js'
 import { diagnosticoLLM } from './_lib/rag.js'
 import { preflight } from './_lib/http.js'
@@ -16,15 +16,20 @@ export default function handler(req, res) {
 
   const emb = embeddingsConfig()
   const meta = metaVectores()
+  // La semántica solo está operativa si hay clave Y los vectores corresponden
+  // al corpus actual.
+  const semantica = semanticaDisponible() && vectoresAlineados()
   return res.status(200).json({
     status: 'ok',
     modo: 'vercel-serverless',
-    motor: semanticaDisponible() ? 'hibrido' : 'bm25',
-    recuperacion: semanticaDisponible() ? 'hibrida' : 'keyword',
+    motor: semantica ? 'hibrido' : 'bm25',
+    recuperacion: semantica ? 'hibrida' : 'keyword',
     coleccion: 'Normativa',
     objetos: totalFragmentos(),
     embeddings_modelo: emb ? emb.modelo : null,
-    vectores: meta ? { n: meta.n, dim: meta.dim, modelo: meta.modelo } : null,
+    vectores: meta
+      ? { n: meta.n, dim: meta.dim, modelo: meta.modelo, alineados: vectoresAlineados() }
+      : null,
     llm: diagnosticoLLM(),
   })
 }
