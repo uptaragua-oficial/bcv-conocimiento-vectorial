@@ -36,14 +36,27 @@ function mockRes() {
 const peticion = (extra = {}) => ({ method: 'GET', query: {}, body: {}, ...extra })
 
 // ---------------- Tokenizador ----------------
-test('tokenizar normaliza acentos y descarta ruido', () => {
+test('tokenizar normaliza acentos, recorta a raíz y descarta ruido', () => {
   const t = tokenizar('El Artículo 6° sobre la INFLACIÓN y los Bs.')
-  assert.ok(t.includes('articulo'))
-  assert.ok(t.includes('inflacion'))
+  assert.ok(t.includes('articul'), 'recorta a raíz de 7 caracteres')
+  assert.ok(t.includes('inflaci'))
   assert.ok(t.includes('sobre'))
   assert.ok(!t.includes('°'))
   // Se descartan tokens de un solo carácter
   assert.deepEqual(tokenizar('a b c'), [])
+})
+
+test('la lematización une plurales y géneros del español', () => {
+  // Es lo que hace que «operador cambiario autorizado» encuentre el artículo
+  // que dice «operadores cambiarios autorizados».
+  assert.deepEqual(tokenizar('operador'), tokenizar('operadores'))
+  assert.deepEqual(tokenizar('cambiario'), tokenizar('cambiarios'))
+  assert.deepEqual(tokenizar('autorizado'), tokenizar('autorizados'))
+  assert.deepEqual(tokenizar('requisitos'), tokenizar('requisito'))
+
+  // Pero no fusiona palabras distintas
+  assert.notDeepEqual(tokenizar('autoridad'), tokenizar('autorizado'))
+  assert.notDeepEqual(tokenizar('sistema'), tokenizar('sistematico'))
 })
 
 // ---------------- Endpoints ----------------
