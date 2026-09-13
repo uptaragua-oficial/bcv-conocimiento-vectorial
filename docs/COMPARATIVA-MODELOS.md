@@ -77,7 +77,9 @@ Cuando la línea base léxica ya es muy alta, el margen es estrecho.
 términos exactos («Artículo 31», «encaje legal», siglas) pesan muchísimo.
 
 > **Implicación práctica:** nunca actives solo la búsqueda semántica. Siempre
-> híbrida, y con `alpha ≈ 0.5`, que es el valor por defecto del portal.
+> híbrida, y con `alpha = 0.7`, que es el valor por defecto del portal desde que
+> se comprobó que con 0.5 el Art. 12 del Convenio Cambiario N.º 1 no entraba
+> entre los candidatos (ver §6).
 
 ### BGE-M3 y e5-large están empatados en híbrida
 
@@ -236,8 +238,24 @@ Dos lecturas:
 **La solución de fondo es un *rerank* con cross-encoder** sobre la unión de
 candidatos: el Art. 12 está en el top-5 denso y en el top-35 léxico, así que un
 reranker que lea consulta y fragmento juntos lo puntuaría por su contenido real y
-no por cuántas veces repite una palabra. El modelo `BAAI/bge-reranker-v2-m3` ya
-está en la caché local y es el que contempla la propuesta técnica, pero **no cabe
-en una función serverless de Vercel**: exige el Modo B (backend dedicado) o un
-proveedor de *rerank* por API.
+no por cuántas veces repite una palabra.
+
+### Resuelto: rerank + α=0.7
+
+Se implementó y se midió (detalle en [`RERANK.md`](RERANK.md)):
+
+| Configuración | Art. 12 en top-5 | nDCG@5 *silver* |
+|---|---:|---:|
+| α=0.5, sin rerank (la anterior) | 3/7 | 0.917 |
+| **α=0.7 + rerank** | **7/7** | **0.917** |
+
+El hallazgo que cambió el diseño: **el rerank solo reordena lo que recibe**. Con
+α=0.5 el Art. 12 no entraba ni entre los 20 primeros candidatos, así que ningún
+cross-encoder podía rescatarlo. El arreglo real fue subir α a 0.7 para que
+entrara en la lista; a partir de ahí el cross-encoder lo deja **3.º**.
+
+En Modo B el modelo corre en local. En Modo A (Vercel) no cabe —2,2 GB frente al
+límite de 250 MB, y 16 s por consulta en CPU— así que se delega en un proveedor
+externo con el formato estándar de rerank. Es opcional: sin proveedor
+configurado, el portal sigue igual.
 

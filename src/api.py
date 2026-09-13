@@ -57,7 +57,9 @@ class SearchRequest(BaseModel):
     query: str = Field(..., description="Consulta en lenguaje natural.")
     modo: str = Field("hybrid", description="semantic | keyword | hybrid")
     limit: int = Field(5, ge=1, le=50)
-    alpha: float = Field(0.5, ge=0.0, le=1.0, description="Peso denso vs. léxico (híbrida).")
+    alpha: float = Field(
+        search_mod.ALPHA_POR_DEFECTO, ge=0.0, le=1.0, description="Peso denso vs. léxico (híbrida)."
+    )
     rerank: bool = Field(False, description="Aplicar re-ranking (cross-encoder si está disponible).")
     filtros: dict[str, Any] | None = Field(
         None,
@@ -121,7 +123,7 @@ def search_get(
     q: str = Query(..., description="Consulta"),
     modo: str = Query("hybrid"),
     limit: int = Query(5, ge=1, le=50),
-    alpha: float = Query(0.5, ge=0.0, le=1.0),
+    alpha: float = Query(search_mod.ALPHA_POR_DEFECTO, ge=0.0, le=1.0),
     rerank: bool = Query(False),
     tipo_norma: str | None = Query(None),
     materia: str | None = Query(None),

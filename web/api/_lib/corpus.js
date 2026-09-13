@@ -16,9 +16,24 @@ import { fileURLToPath } from 'node:url'
 
 import { construir, buscar, puntajesBm25, mejores, catalogo } from './bm25.js'
 import { embeberConsulta, semanticaDisponible, vectoresCorpus } from './embeddings.js'
+import { reordenar, rerankConfig, rerankDisponible } from './rerank.js'
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const RUTA_CORPUS = join(AQUI, '..', '_data', 'corpus.json')
+
+/**
+ * Peso de la componente semántica en la fusión híbrida (`alpha`).
+ *
+ * **No es 0.5 por una razón medida.** Con α=0.5, el Art. 12 del Convenio
+ * Cambiario N.º 1 no entraba ni siquiera entre los 20 primeros candidatos para
+ * «¿Qué requisitos exige el BCV para ser operador cambiario autorizado?»; un
+ * cross-encoder solo puede reordenar lo que recibe, así que no había forma de
+ * rescatarlo. Con α=0.7 el artículo entra y el rerank lo deja 3.º.
+ *
+ * Coste medido en el conjunto de evaluación (150 consultas): 0.884 → 0.882 de
+ * nDCG@5, dentro del error de muestreo. Ver `docs/RERANK.md`.
+ */
+export const ALPHA_POR_DEFECTO = 0.7
 
 let datos = null
 let indice = null
@@ -73,12 +88,23 @@ function normalizar(scores) {
 /**
  * Búsqueda híbrida con fusión lineal: `alpha` pondera lo semántico y
  * `1 - alpha` lo léxico. Si no hay embeddings disponibles, cae a BM25.
+ *
+ * Con `rerank: true` se recuperan primero `RERANK_CANDIDATOS` candidatos (30 por
+ * defecto) y un cross-encoder externo los reordena por relevancia real. Es
+ * justo lo que la fusión no puede hacer: un fragmento que repite el término de
+ * la consulta muchas veces pero no responde a la pregunta puntúa alto en BM25 y
+ * el cross-encoder lo baja.
  */
 export async function buscarHibrido(consulta, opciones = {}) {
   const indice = getIndice()
   const limit = Math.min(Math.max(opciones.limit || 5, 1), 50)
   const filtros = opciones.filtros || null
-  const alpha = opciones.alpha === undefined ? 0.5 : Number(opciones.alpha)
+  const alpha = opciones.alpha === undefined ? ALPHA_POR_DEFECTO : Number(opciones.alpha)
+  // `rerank: undefined` = automático: se aplica si hay proveedor configurado.
+  // `rerank: false` lo desactiva aunque lo haya.
+  const quiereRerank =
+    (opciones.rerank === true || opciones.rerank === undefined) && rerankDisponible()
+  const nCandidatos = quiereRerank ? Math.max(rerankConfig().candidatos, limit) : limit
   const t0 = Date.now()
 
   const lexicos = puntajesBm25(indice, consulta)
@@ -91,13 +117,28 @@ export async function buscarHibrido(consulta, opciones = {}) {
     }
   }
 
+  const terminar = async (candidatos, modo, alphaDevolvido) => {
+    if (!quiereRerank || candidatos.length < 2) {
+      return { resultados: candidatos.slice(0, limit), modo, alpha: alphaDevolvido, rerank: false }
+    }
+    const t1 = Date.now()
+    const reordenados = await reordenar(consulta, candidatos, { limit })
+    return {
+      resultados: reordenados,
+      modo,
+      alpha: alphaDevolvido,
+      rerank: true,
+      ms_rerank: Date.now() - t1,
+    }
+  }
+
   if (!vector) {
-    return { resultados: mejores(indice, lexicos, limit, filtros), modo: 'keyword', alpha: null }
+    return terminar(mejores(indice, lexicos, nCandidatos, filtros), 'keyword', null)
   }
 
   const densos = puntajesCoseno(indice, vector)
   if (!densos) {
-    return { resultados: mejores(indice, lexicos, limit, filtros), modo: 'keyword', alpha: null }
+    return terminar(mejores(indice, lexicos, nCandidatos, filtros), 'keyword', null)
   }
 
   const dl = normalizar(densos)
@@ -107,12 +148,8 @@ export async function buscarHibrido(consulta, opciones = {}) {
     fusion[i] = alpha * dl[i] + (1 - alpha) * ll[i]
   }
 
-  return {
-    resultados: mejores(indice, fusion, limit, filtros),
-    modo: 'hibrida',
-    alpha,
-    ms_vector: Date.now() - t0,
-  }
+  const resultado = await terminar(mejores(indice, fusion, nCandidatos, filtros), 'hibrida', alpha)
+  return { ...resultado, ms_vector: Date.now() - t0 }
 }
 
 /**

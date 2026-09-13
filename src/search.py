@@ -16,12 +16,21 @@ lo que alimenta la fase de evaluación y monitoreo.
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any
 
 from config import settings
 from src import embeddings, store
+
+#: Peso de la componente densa en la fusión híbrida.
+#:
+#: No es 0.5 por una razón medida: con 0.5 el Art. 12 del Convenio Cambiario
+#: N.º 1 no entraba entre los candidatos que ve el cross-encoder, así que el
+#: rerank no podía rescatarlo. Con 0.7 entra y el rerank lo deja 3.º. El coste
+#: en el conjunto de evaluación es de 0.002 de nDCG@5. Ver `docs/RERANK.md`.
+ALPHA_POR_DEFECTO = float(os.getenv("HYBRID_ALPHA", "0.7"))
 
 # ----------------------------------------------------------------------
 # Filtros
@@ -64,6 +73,14 @@ def build_filter(filtros: dict[str, Any] | None):
 _reranker = None
 _reranker_intentado = False
 
+#: Recorte del texto que se envía al cross-encoder. Acota el coste por par:
+#: los fragmentos largos dominan el tiempo de inferencia y el modelo trunca a
+#: 512 tokens de todos modos.
+RERANK_MAX_CARACTERES = 2000
+
+#: Candidatos que se recuperan antes de reordenar.
+RERANK_CANDIDATOS = int(os.getenv("RERANK_CANDIDATOS", "30"))
+
 
 def _get_reranker():
     """Carga un cross-encoder si está disponible (opcional)."""
@@ -71,12 +88,23 @@ def _get_reranker():
     if _reranker_intentado:
         return _reranker
     _reranker_intentado = True
+    if os.getenv("RERANK_ACTIVO", "true").lower() == "false":
+        _reranker = None
+        return _reranker
     try:
         from sentence_transformers import CrossEncoder
 
-        nombre = "BAAI/bge-reranker-v2-m3"
+        nombre = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
         print(f"Cargando cross-encoder: {nombre} ...")
-        _reranker = CrossEncoder(nombre, device="cpu")
+        try:
+            import torch
+
+            dispositivo = os.getenv("RERANK_DEVICE") or (
+                "cuda" if torch.cuda.is_available() else "cpu"
+            )
+        except Exception:  # noqa: BLE001
+            dispositivo = "cpu"
+        _reranker = CrossEncoder(nombre, device=dispositivo, max_length=512)
     except Exception as exc:  # noqa: BLE001
         print(f"[aviso] Cross-encoder no disponible ({exc}). Re-ranking por fusión de scores.")
         _reranker = None
@@ -89,8 +117,8 @@ def _rerank(query: str, items: list[dict], top_k: int) -> list[dict]:
     ce = _get_reranker()
     if ce is not None:
         try:
-            pares = [(query, it["texto"]) for it in items]
-            scores = ce.predict(pares)
+            pares = [(query, (it["texto"] or "")[:RERANK_MAX_CARACTERES]) for it in items]
+            scores = ce.predict(pares, batch_size=16, show_progress_bar=False)
             for it, s in zip(items, scores):
                 it["rerank_score"] = float(s)
             items.sort(key=lambda x: x["rerank_score"], reverse=True)
@@ -159,14 +187,17 @@ def search(
     query: str,
     modo: str = "hybrid",
     limit: int = 5,
-    alpha: float = 0.5,
+    alpha: float = ALPHA_POR_DEFECTO,
     filtros: dict | None = None,
     rerank: bool = False,
     log: bool = True,
 ) -> list[dict]:
     """Búsqueda unificada. ``modo`` ∈ {semantic, keyword, hybrid}."""
     t0 = time.perf_counter()
-    candidatos = _consultar(modo, query, max(limit * 4, 20) if rerank else limit, alpha, filtros)
+    # Un cross-encoder no puede puntuar todo el corpus: se recuperan primero
+    # `RERANK_CANDIDATOS` candidatos y solo esos se reordenan.
+    n_candidatos = max(RERANK_CANDIDATOS, limit) if rerank else limit
+    candidatos = _consultar(modo, query, n_candidatos, alpha, filtros)
     if rerank:
         candidatos = _rerank(query, candidatos, limit)
     else:

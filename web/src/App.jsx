@@ -108,6 +108,14 @@ export default function App() {
             <span className="rounded-full bg-white/15 px-2 py-1">
               {catalogo.recuperacion === 'hibrida' ? 'Búsqueda híbrida' : 'Búsqueda BM25'}
             </span>
+            {catalogo.rerank && (
+              <span
+                className="rounded-full bg-white/15 px-2 py-1"
+                title={`Reordenación con cross-encoder${catalogo.modelo_rerank ? ` · ${catalogo.modelo_rerank}` : ''}`}
+              >
+                Rerank
+              </span>
+            )}
             <button
               onClick={() => setConfigAbierto((v) => !v)}
               title="Configurar la dirección del backend"

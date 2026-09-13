@@ -2,6 +2,7 @@
 import { catalogoCorpus, totalFragmentos, vectoresAlineados } from './_lib/corpus.js'
 import { proveedorLLM } from './_lib/rag.js'
 import { embeddingsConfig, semanticaDisponible } from './_lib/embeddings.js'
+import { rerankConfig, rerankDisponible } from './_lib/rerank.js'
 import { preflight } from './_lib/http.js'
 
 export default function handler(req, res) {
@@ -9,6 +10,7 @@ export default function handler(req, res) {
 
   const proveedor = proveedorLLM()
   const emb = embeddingsConfig()
+  const rr = rerankConfig()
   // Se exige además que los vectores correspondan al corpus actual; si no, la
   // recuperación sería 'keyword' de todos modos.
   const semantica = semanticaDisponible() && vectoresAlineados()
@@ -18,6 +20,8 @@ export default function handler(req, res) {
     proveedor_llm: proveedor ? proveedor.nombre : null,
     modelo_llm: proveedor ? proveedor.modelo : null,
     recuperacion: semantica ? 'hibrida' : 'keyword',
+    rerank: rerankDisponible(),
+    modelo_rerank: rr ? rr.modelo : null,
     modelo_embeddings: emb ? emb.modelo : null,
     total_fragmentos: totalFragmentos(),
   })

@@ -5,7 +5,7 @@
  * compone la respuesta con citas y, si hay proveedor de LLM, la redacta.
  * El campo `recuperacion` indica qué estrategia se usó.
  */
-import { buscarHibrido } from './_lib/corpus.js'
+import { buscarHibrido, ALPHA_POR_DEFECTO } from './_lib/corpus.js'
 import { chat } from './_lib/rag.js'
 import { preflight, parametros, normalizarFiltros } from './_lib/http.js'
 
@@ -24,16 +24,25 @@ export default async function handler(req, res) {
 
   const limit = Math.min(Math.max(Number(p.limit) || 5, 1), 10)
   const filtros = normalizarFiltros(p.filtros)
-  const alpha = p.alpha === undefined ? 0.5 : Number(p.alpha)
+  const alpha = p.alpha === undefined ? ALPHA_POR_DEFECTO : Number(p.alpha)
+  // El rerank se activa si el llamador lo pide; si no lo menciona, se aplica
+  // cuando hay proveedor configurado (RERANK_API_URL).
+  const rerank = p.rerank === undefined ? undefined : p.rerank === true || p.rerank === 'true'
   const t0 = Date.now()
 
   try {
-    const { resultados, modo } = await buscarHibrido(mensaje, { limit, filtros, alpha })
+    const { resultados, modo, rerank: aplicado } = await buscarHibrido(mensaje, {
+      limit,
+      filtros,
+      alpha,
+      rerank,
+    })
     const salida = await chat({ mensaje, resultados, historial: p.historial })
     return res.status(200).json({
       ...salida,
       recuperacion: modo,
-      alpha: modo === 'hibrida' ? alpha : null,
+      alpha: modo.startsWith('hibrida') ? alpha : null,
+      rerank: Boolean(aplicado),
       latencia_ms: Date.now() - t0,
     })
   } catch (e) {

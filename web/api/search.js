@@ -5,7 +5,7 @@
  * semántico con `alpha` (1 = solo semántico, 0 = solo BM25). Si no, responde
  * con BM25 y lo indica en `modo`.
  */
-import { buscarHibrido } from './_lib/corpus.js'
+import { buscarHibrido, ALPHA_POR_DEFECTO } from './_lib/corpus.js'
 import { preflight, parametros, normalizarFiltros } from './_lib/http.js'
 
 export default async function handler(req, res) {
@@ -19,15 +19,22 @@ export default async function handler(req, res) {
 
   const limit = Math.min(Math.max(Number(p.limit) || 5, 1), 50)
   const filtros = normalizarFiltros(p.filtros)
-  const alpha = p.alpha === undefined ? 0.5 : Number(p.alpha)
+  const alpha = p.alpha === undefined ? ALPHA_POR_DEFECTO : Number(p.alpha)
+  const rerank = p.rerank === undefined ? undefined : p.rerank === true || p.rerank === 'true'
   const t0 = Date.now()
 
   try {
-    const { resultados, modo } = await buscarHibrido(query, { limit, filtros, alpha })
+    const { resultados, modo, rerank: aplicado } = await buscarHibrido(query, {
+      limit,
+      filtros,
+      alpha,
+      rerank,
+    })
     return res.status(200).json({
       query,
       modo,
-      alpha: modo === 'hibrida' ? alpha : null,
+      alpha: modo.startsWith('hibrida') ? alpha : null,
+      rerank: Boolean(aplicado),
       n: resultados.length,
       latencia_ms: Date.now() - t0,
       resultados,
