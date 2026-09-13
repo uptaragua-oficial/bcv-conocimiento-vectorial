@@ -25,20 +25,38 @@ from config import settings
 
 # Secciones del dominio jurídico del portal del BCV.
 SEEDS: list[str] = [
+    # Marco jurídico
     "/marco/leyes_bcv",
     "/marco/convenios-cambiarios",
     "/marco/decreto-reglamentos-resolucion-cambiaria",
     "/marco/decreto-reglamentos-resolucion-monetaria",
     "/marco/decreto-reglamentos-resolucion-pago",
     "/marco/decreto-reglamentos-resolucion-minerales",
+    # Sistema de pagos
     "/sistema-de-pagos/aspectos-legales/actos-administrativos",
     "/sistema-de-pagos/cce/actos-administrativos",
     "/sistemas-de-pago/documentos",
+    # Actos administrativos por materia (79 documentos que antes quedaban fuera).
+    # Se añadieron tras comprobar que las ocho secciones existen y no se
+    # ingestaban: son circulares que regulan la operativa de las instituciones.
+    "/actos-adm-moneda-ext",
+    "/actos-adm-encaje-legal",
+    "/actos-adm-operaciones-mercado-abierto",
+    "/actos-adm-asistencia-financiera",
+    "/actos-adm-politica-monetaria-agente-financiero",
+    "/actos-adm-sinex",
+    "/actos-adm-instrumento-directo-bcv",
+    "/actos-adm-turismo",
 ]
 
 DOC_EXT = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".odt", ".ods")
 # Prefijos internos que se rastrean en profundidad 1 (páginas hijas).
-FOLLOW_PREFIXES = ("/marco/", "/sistema-de-pagos/", "/sistemas-de-pago/")
+FOLLOW_PREFIXES = (
+    "/marco/",
+    "/sistema-de-pagos/",
+    "/sistemas-de-pago/",
+    "/actos-adm",
+)
 
 HEADERS = {"User-Agent": settings.USER_AGENT, "Accept-Language": "es-VE,es;q=0.9"}
 
@@ -112,7 +130,7 @@ def _follow(url: str) -> bool:
     return any(path.startswith(p) for p in FOLLOW_PREFIXES)
 
 
-def run(limit_pages: int = 60, limit_docs: int = 250, delay: float | None = None) -> dict:
+def run(limit_pages: int = 120, limit_docs: int = 600, delay: float | None = None) -> dict:
     """Ejecuta la ingesta y devuelve un resumen."""
     delay = settings.REQUEST_DELAY_SECONDS if delay is None else delay
     session = _session()
@@ -166,13 +184,32 @@ def run(limit_pages: int = 60, limit_docs: int = 250, delay: float | None = None
             if d in seen_docs or len(seen_docs) >= limit_docs:
                 continue
             seen_docs.add(d)
+            fname = Path(urlparse(d).path).name or _slug(d)
+            destino = doc_dir / fname
+            # Reanudable: si ya está descargado y no está vacío, no se repite.
+            # Un corte a mitad de ingesta solo cuesta el documento en curso.
+            if destino.exists() and destino.stat().st_size > 0:
+                documentos.append(
+                    {
+                        "id": f"doc_{len(documentos)+1:04d}",
+                        "url": d,
+                        "archivo": fname,
+                        "ext": Path(fname).suffix.lower(),
+                        "origen": _slug(url),
+                        "bytes": destino.stat().st_size,
+                        "hash": _sha256(destino.read_bytes()),
+                        "fecha_captura": _now(),
+                        "estado": "ok",
+                        "cacheado": True,
+                    }
+                )
+                continue
             try:
                 content = _get(session, d, binary=True)
             except Exception as exc:  # noqa: BLE001
                 documentos.append({"url": d, "estado": f"error: {exc}", "ext": Path(urlparse(d).path).suffix})
                 continue
-            fname = Path(urlparse(d).path).name or _slug(d)
-            (doc_dir / fname).write_bytes(content)
+            destino.write_bytes(content)
             documentos.append(
                 {
                     "id": f"doc_{len(documentos)+1:04d}",
