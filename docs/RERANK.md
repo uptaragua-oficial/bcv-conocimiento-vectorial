@@ -59,23 +59,50 @@ El modelo pesa 2,2 GB en fp32 y el límite de una función serverless de Vercel 
 (consulta, fragmento) en CPU: **16,3 segundos por consulta** medidos, muy por
 encima de lo razonable.
 
-Así que en Modo A el rerank se **delega en un proveedor externo** mediante el
-formato estándar de la industria (lo usan Jina, Cohere, Voyage y Text Embeddings
-Inference):
+Así que en Modo A el rerank se **delega en un proveedor externo**. Hay dos
+dialectos y el cliente habla los dos; el formato se deduce de la URL.
+
+**Estándar** (Jina, Cohere, Voyage, Text Embeddings Inference):
 
 ```
 POST {RERANK_API_URL}
-{ "model": "...", "query": "...", "documents": ["...", "..."], "top_n": 5 }
+{ "model": "...", "query": "...", "documents": ["…"], "top_n": 5 }
 
 → { "results": [ { "index": 3, "relevance_score": 0.87 }, … ] }
 ```
 
-El `index` es la posición en el arreglo `documents` que se envió, y sirve para
-reordenar los candidatos originales conservando sus metadatos y sus citas.
+**DeepInfra** — endpoint propio, con el modelo en la ruta:
+
+```
+POST https://api.deepinfra.com/v1/inference/{modelo}
+{ "queries": ["..."], "documents": ["…"] }
+
+→ { "scores": [0.94, 0.0001, …], "input_tokens": 348 }
+```
+
+Las diferencias no son cosméticas:
+
+| | Estándar | DeepInfra |
+|---|---|---|
+| Modelo | en el cuerpo (`model`) | **en la URL** |
+| Consulta | `query` (cadena) | `queries` (**arreglo**) |
+| `top_n` | sí | **no**: se recorta en el cliente |
+| Respuesta | `results[]` con `index` | `scores[]` **alineado con la entrada** |
+| Orden | ya viene ordenado | **sin ordenar**: hay que ordenarlo |
+| Extra | — | `instruction` para orientar la tarea |
+
+El caso peligroso es el último: como `scores` viene en el orden de entrada, un
+desajuste de longitud asignaría a cada fragmento el puntaje de otro. Por eso se
+comprueba que la longitud cuadre y, si no, se conserva el orden original; hay una
+prueba específica para ello.
 
 **Es opcional y nunca rompe nada.** Si no hay `RERANK_API_URL`, o el proveedor
 devuelve un error, un JSON ilegible o una lista vacía, se conserva el orden de
-la búsqueda híbrida. Está cubierto con diez pruebas (`web/tests/rerank.test.mjs`).
+la búsqueda híbrida. Está cubierto con dieciocho pruebas
+(`web/tests/rerank.test.mjs`).
+
+La comparación entre proveedores —modelos, precios, límites y cuál conviene—
+está en [`PROVEEDORES-RERANK.md`](PROVEEDORES-RERANK.md).
 
 ---
 
@@ -121,6 +148,21 @@ Sin rerank, los mismos generadores daban 3/7 (α=0.5) y 5/7 (α=0.7).
 cross-encoder lo rescata y da casi igual cómo se generaron. Lo que importa es
 que **esté** en la lista, y eso es lo que arregla α=0.7.
 
+### Qué cross-encoder elegir
+
+Medido sobre los mismos candidatos (α=0.7, 20 candidatos), con el artículo
+objetivo en las siete consultas reales:
+
+| Modelo | En el top-5 | nDCG@5 *silver* |
+|---|---:|---:|
+| `BAAI/bge-reranker-v2-m3` | **7/7** | 0.9259 |
+| `Qwen/Qwen3-Reranker-0.6B` | 6/7 | no medido |
+
+El modelo más barato de DeepInfra rinde al nivel del `bge-reranker-v2-m3` local
+—y en la consulta original lo coloca primero— así que no hay que sacrificar
+calidad por usar un proveedor externo. El detalle, con precios y límites, está
+en [`PROVEEDORES-RERANK.md`](PROVEEDORES-RERANK.md).
+
 ---
 
 ## 4. Configuración
@@ -129,10 +171,28 @@ que **esté** en la lista, y eso es lo que arregla α=0.7.
 |---|---|---|
 | `RERANK_API_URL` | *(vacío)* | Endpoint del proveedor. Sin esto no hay rerank |
 | `RERANK_API_KEY` | *(vacío)* | Clave, si el proveedor la pide |
-| `RERANK_MODEL` | `BAAI/bge-reranker-v2-m3` | Modelo a solicitar |
+| `RERANK_FORMATO` | `auto` | `estandar` o `deepinfra`; por defecto se deduce de la URL |
+| `RERANK_MODEL` | según formato | Modelo: `bge-reranker-v2-m3` (estándar) o `Qwen3-Reranker-0.6B` (DeepInfra) |
 | `RERANK_CANDIDATOS` | `30` | Candidatos a recuperar antes de reordenar (se acota a 10–100) |
 | `RERANK_ACTIVO` | `true` | `false` lo desactiva aunque haya proveedor |
+| `RERANK_INSTRUCTION` | *(vacío)* | Solo DeepInfra: instrucción que orienta la tarea |
 | `HYBRID_ALPHA` | `0.7` | Peso de lo semántico en la fusión (solo backend Python) |
+
+En DeepInfra el modelo puede venir en la propia URL, con el marcador `{model}` o
+en `RERANK_MODEL`. Las tres formas valen:
+
+```
+RERANK_API_URL=https://api.deepinfra.com/v1/inference/Qwen/Qwen3-Reranker-8B
+RERANK_API_URL=https://api.deepinfra.com/v1/inference/{model}   # + RERANK_MODEL
+RERANK_API_URL=https://api.deepinfra.com/v1/inference          # + RERANK_MODEL
+```
+
+> **`RERANK_API_URL` es solo del Modo A.** En el Modo B el modelo se ejecuta en
+> local y `RERANK_MODEL` es el nombre del modelo de Hugging Face que descarga
+> `sentence-transformers`. Si se despliegan ambos modos con el mismo archivo de
+> entorno, conviene saber que la variable se interpreta de forma distinta en
+> cada uno; el Modo B ignora `RERANK_API_URL` y el Modo A ignora
+> `RERANK_DEVICE`.
 
 El rerank se aplica **por defecto cuando hay proveedor configurado**. Se puede
 desactivar por petición con `"rerank": false`, y en Modo A `/api/health` y
