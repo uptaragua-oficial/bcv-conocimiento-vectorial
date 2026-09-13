@@ -376,6 +376,9 @@ def probar_rerank() -> bool:
         fallo("La respuesta no contiene puntajes", str(datos)[:200])
         return False
     ok(f"Proveedor operativo: devolvió {len(puntajes)} puntaje(s)")
+    uso = datos.get("usage") if isinstance(datos, dict) else None
+    if uso:
+        print(color(f"    consumo de esta prueba: {json.dumps(uso, ensure_ascii=False)}", GRIS))
     return True
 
 
@@ -424,6 +427,90 @@ def revisar_claves() -> int:
     return 0 if all(resultados[:2]) else 1
 
 
+def medir_coste() -> int:
+    """Mide cuántos tokens consume el rerank de UNA consulta real del portal.
+
+    Se envía la consulta de referencia con los mismos 30 fragmentos —recortados
+    igual que en producción— que enviaría la función de Vercel, y se informa del
+    consumo. Sirve para traducir un saldo de tokens a número de consultas, que es
+    la pregunta que de verdad importa.
+    """
+    print("\nConsumo por consulta")
+    url = (os_environ("RERANK_API_URL") or "").strip()
+    if not url:
+        fallo("RERANK_API_URL no está definida")
+        return 1
+
+    candidatos = int(os_environ("RERANK_CANDIDATOS") or 30)
+    docs = cargar_corpus_local()
+    if not docs:
+        fallo("No encuentro web/api/_data/corpus.json para tomar fragmentos reales")
+        return 1
+    # Muestra repartida por todo el corpus, no los primeros: los fragmentos
+    # iniciales son preámbulos cortos y darían un consumo muy inferior al real.
+    # El recorte es el mismo que hace el cliente del portal.
+    paso = max(1, len(docs) // candidatos)
+    muestra = docs[::paso][:candidatos]
+    documentos = [(d[6] or "")[:2000] for d in muestra if (d[6] or "").strip()]
+    print(color(f"  enviando {len(documentos)} fragmentos (RERANK_CANDIDATOS={candidatos})", GRIS))
+
+    clave = (os_environ("RERANK_API_KEY") or "").strip()
+    bajo = url.lower()
+    es_deepinfra = "deepinfra.com" in bajo or "/inference" in bajo
+    modelo = (os_environ("RERANK_MODEL") or "").strip()
+    if not modelo:
+        if es_deepinfra:
+            modelo = "Qwen/Qwen3-Reranker-0.6B"
+        elif "jina.ai" in bajo:
+            modelo = "jina-reranker-v3.5"
+        else:
+            modelo = "BAAI/bge-reranker-v2-m3"
+    destino = url.rstrip("/")
+    if es_deepinfra:
+        cuerpo = {"queries": [CONSULTA_REFERENCIA], "documents": documentos}
+    else:
+        cuerpo = {"model": modelo, "query": CONSULTA_REFERENCIA,
+                  "documents": documentos, "top_n": 5}
+
+    codigo, datos = peticion(destino, metodo="POST", cuerpo=cuerpo,
+                             cabeceras={"Authorization": f"Bearer {clave}"}, timeout=120)
+    if codigo != 200:
+        fallo(f"El proveedor respondió HTTP {codigo}", _explicar(codigo, "el proveedor"))
+        print(color(f"    respuesta: {str(datos)[:200]}", GRIS))
+        return 1
+
+    caracteres = sum(len(d) for d in documentos) + len(CONSULTA_REFERENCIA)
+    uso = datos.get("usage") if isinstance(datos, dict) else None
+    if uso:
+        total = uso.get("total_tokens") or uso.get("prompt_tokens")
+        print(f"\n  Consumo real medido: {color(str(total) + ' tokens', VERDE)} por consulta")
+        if total:
+            for saldo in (100_000, 1_000_000, 5_000_000):
+                print(f"    {saldo:>10,} tokens → ~{saldo // int(total):>6,} consultas".replace(",", "."))
+    else:
+        # Sin `usage` en la respuesta: se estima, dejando claro que es una estimación.
+        aprox = caracteres // 4
+        print(f"\n  El proveedor no informa del consumo. Aproximación: "
+              f"{color('~' + format(aprox, ',') + ' tokens', AMARILLO)} por consulta")
+        print(color("    (estimación por caracteres /4; el valor real lo da el panel del proveedor)", GRIS))
+        for saldo in (100_000, 1_000_000, 5_000_000):
+            print(f"    {saldo:>10,} tokens → ~{saldo // max(aprox, 1):>6,} consultas".replace(",", "."))
+
+    print(color(f"\n  Para bajar el consumo: RERANK_CANDIDATOS=20 "
+                f"(verificado: el Art. 12 sigue entrando en el top-5)", GRIS))
+    print()
+    return 0
+
+
+def cargar_corpus_local() -> list | None:
+    """Fragmentos del corpus de este repositorio."""
+    ruta = RAIZ / "web" / "api" / "_data" / "corpus.json"
+    try:
+        return json.loads(ruta.read_text(encoding="utf-8"))["docs"]
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Verifica un despliegue del portal")
     ap.add_argument("base", nargs="?", default="http://localhost:3001", help="URL base")
@@ -432,10 +519,17 @@ def main() -> None:
         action="store_true",
         help="prueba las claves de esta terminal contra los proveedores, sin consultar el despliegue",
     )
+    ap.add_argument(
+        "--coste",
+        action="store_true",
+        help="mide los tokens que consume el rerank de una consulta real",
+    )
     args = ap.parse_args()
 
     if args.claves:
         raise SystemExit(revisar_claves())
+    if args.coste:
+        raise SystemExit(medir_coste())
     base = args.base.rstrip("/")
 
     print(f"\nVerificando {color(base, GRIS)}\n")
