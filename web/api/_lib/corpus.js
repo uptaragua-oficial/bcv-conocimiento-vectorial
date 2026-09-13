@@ -123,6 +123,12 @@ export async function buscarHibrido(consulta, opciones = {}) {
     }
     const t1 = Date.now()
     const reordenados = await reordenar(consulta, candidatos, { limit })
+    // `null` = se intentó y no se pudo (proveedor caído, clave inválida, respuesta
+    // inservible). Se conserva el orden de la búsqueda y se informa con
+    // honestidad: marcar `rerank: true` habiendo fallado oculta el problema.
+    if (!reordenados) {
+      return { resultados: candidatos.slice(0, limit), modo, alpha: alphaDevolvido, rerank: false }
+    }
     return {
       resultados: reordenados,
       modo,

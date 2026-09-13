@@ -361,3 +361,38 @@ test('diagnosticoLLM detecta una clave del proveedor equivocado', async () => {
     }
   }
 })
+
+test('si el rerank está configurado pero falla, la respuesta lo dice', async () => {
+  // El caso peligroso: hay RERANK_API_URL, el proveedor rechaza la petición y el
+  // portal responde igualmente. Si además informara `rerank: true`, nadie se
+  // enteraría de que el reordenamiento no ocurrió.
+  const previo = {
+    url: process.env.RERANK_API_URL,
+    clave: process.env.RERANK_API_KEY,
+    candidatos: process.env.RERANK_CANDIDATOS,
+  }
+  try {
+    process.env.RERANK_API_URL = 'http://127.0.0.1:1/inference'
+    process.env.RERANK_API_KEY = 'token-invalido'
+    process.env.RERANK_CANDIDATOS = '30'
+
+    const r = mockRes()
+    await search(
+      peticion({ method: 'POST', body: { query: 'encaje legal', limit: 5 } }),
+      r,
+    )
+    assert.equal(r.statusCode, 200, 'debe responder aunque el rerank falle')
+    assert.equal(r.body.rerank, false, 'no puede decir que reordenó si no lo hizo')
+    assert.ok(r.body.resultados.length > 0, 'y debe devolver resultados igualmente')
+    assert.equal(r.body.resultados[0].rerank_score, undefined, 'sin puntajes inventados')
+  } finally {
+    for (const [k, v] of Object.entries({
+      RERANK_API_URL: previo.url,
+      RERANK_API_KEY: previo.clave,
+      RERANK_CANDIDATOS: previo.candidatos,
+    })) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+})

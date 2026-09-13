@@ -33,17 +33,44 @@ No requiere HuggingFace, ni túneles, ni servidores.
 ### Desplegar
 
 1. <https://vercel.com/new> → importar `uptaragua-oficial/bcv-conocimiento-vectorial`.
-2. **Root Directory:** `web` *(recomendado)*.
-3. **Variable de entorno (opcional):** `DEEPSEEK_API_KEY` para respuestas redactadas
-   (si prefieres Groq, usa `GROQ_API_KEY`; se elige DeepSeek primero).
-4. **Deploy.** Listo: el portal funciona sin configurar nada más.
+2. **Root Directory:** `web` *(recomendado, lo más simple)*. También vale dejarlo
+   en la raíz del repositorio: el `vercel.json` de la raíz compila `web/` y los
+   re-exports de `api/*.js` delegan en `web/api/*.js`. Ambas configuraciones están
+   verificadas con `npm run trace`.
+3. **Variables de entorno** (Settings → Environment Variables). Las dos primeras
+   son las que activan la búsqueda híbrida y el rerank; sin ellas el portal
+   funciona, pero solo con BM25:
 
-> **También funciona dejando el Root Directory en la raíz del repositorio.**
-> El `vercel.json` de la raíz compila `web/` y los re-exports de `api/*.js`
-> delegan en `web/api/*.js`. Ambas configuraciones están verificadas con
-> `npm run trace` (el corpus entra en el bundle en las dos).
+   | Variable | Valor | Para qué |
+   |---|---|---|
+   | `EMBEDDINGS_API_KEY` | token de Hugging Face (**`hf_…`**) | Vectorizar la consulta con `multilingual-e5-large`, el mismo modelo de los vectores del corpus |
+   | `RERANK_API_KEY` | token de DeepInfra | Reordenar los candidatos con el cross-encoder |
+   | `RERANK_API_URL` | `https://api.deepinfra.com/v1/inference/Qwen/Qwen3-Reranker-0.6B` | Endpoint del rerank |
+   | `DEEPSEEK_API_KEY` | clave de DeepSeek (**`sk-…`**) | Redactar la respuesta. Sin ella, responde en modo extractivo |
 
-#### Si el build falla con «does not define a top-level app FastAPI instance»
+4. **Deploy.**
+
+> ⚠️ **No definas `EMBEDDINGS_MODEL` ni `EMBEDDINGS_BASE_URL`.** El modelo, la URL
+> y el prefijo de consulta se leen de `web/api/_data/embeddings_meta.json`, así
+> que la función se configura sola. Si defines `EMBEDDINGS_MODEL` con un valor
+> distinto al de la meta, el sistema detecta el desajuste y **vuelve a BM25** para
+> no devolver resultados incorrectos.
+>
+> ⚠️ El token de Hugging Face necesita el permiso **«Make calls to Inference
+> Providers»**. Un token sin ese permiso deja el portal en BM25 sin dar error.
+
+5. **Verifica el despliegue** con una sola orden:
+
+   ```bash
+   python -m scripts.verificar_despliegue https://<tu-app>.vercel.app
+   ```
+
+   Comprueba el corpus, la alineación de los vectores, que la búsqueda semántica
+   y el rerank **respondan de verdad** (no solo que estén configurados) y que la
+   consulta de referencia devuelva el artículo correcto. Si algo falta, dice qué
+   variable y dónde.
+
+### Si el build falla con «does not define a top-level app FastAPI instance»
 
 Ese error aparece cuando Vercel construye desde **la raíz del repositorio** y
 detecta el proyecto Python. Ocurre en dos casos:
@@ -55,38 +82,35 @@ detecta el proyecto Python. Ocurre en dos casos:
 Si el proyecto ya estaba creado con la raíz como Root Directory, basta con
 **redesplegar** para que tome el `vercel.json` nuevo; no hace falta recrearlo.
 
-### Búsqueda semántica en Vercel (opcional)
+### Cómo saber si está todo bien
 
-El modo nativo funciona solo con BM25. Para pasar a **búsqueda híbrida**
-(BM25 + similitud coseno) **sin backend dedicado**:
+`/api/health` informa de la **configuración**, no de si los servicios responden
+de verdad: un token inválido deja el portal degradado a BM25 sin que el health
+cambie. La comprobación fiable es la respuesta de una consulta real, y es lo que
+mira el verificador:
 
-1. **Vectoriza el corpus una sola vez**, fuera de línea:
+```bash
+curl -s -X POST https://<tu-app>.vercel.app/api/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"requisitos para ser operador cambiario","limit":5}' \
+  | grep -o '"modo":"[a-z]*"'
+```
 
-   ```bash
-   export EMBEDDINGS_API_KEY=sk-...          # o OPENAI_API_KEY
-   python -m scripts.export_openai_embeddings
-   ```
+- `"modo":"hibrida"` → embeddings funcionando.
+- `"modo":"keyword"` → cayó a BM25: revisa el token de embeddings.
 
-   Genera `web/api/_data/vectors.f32` y `embeddings_meta.json`. El orden de los
-   vectores coincide con el de `corpus.json`, que es lo que garantiza que el
-   coseno apunte al fragmento correcto. Commitea ambos archivos.
+Y en el portal, la cabecera muestra las etiquetas **Búsqueda híbrida** y
+**Rerank** cuando ambas están activas.
 
-2. **Configura las mismas variables en Vercel.** El modelo debe coincidir con el
-   usado al vectorizar, o el sistema cae a BM25 avisando por consola:
+### Rerank
 
-   | Variable | Valor |
-   |---|---|
-   | `EMBEDDINGS_API_KEY` | tu clave |
-   | `EMBEDDINGS_BASE_URL` | `https://api.openai.com/v1` (por defecto) |
-   | `EMBEDDINGS_MODEL` | `text-embedding-3-small` (por defecto) |
+El modelo de rerank no cabe en una función serverless (2,2 GB frente al límite de
+250 MB) ni en su tiempo de ejecución, así que se delega en DeepInfra. El portal
+funciona igual sin configurarlo; simplemente no reordena.
 
-3. **Redespliega.** `/api/health` y `/api/catalogo` indicarán
-   `recuperacion: hibrida`, y el portal mostrará «Búsqueda híbrida».
-
-> La consulta se vectoriza **dentro de la función serverless** con una llamada
-> HTTP al proveedor; los vectores del corpus ya están calculados. Si no hay
-> clave, vectores, o el modelo no coincide, la búsqueda vuelve a BM25
-> automáticamente y sin errores.
+Comparación de proveedores, precios y alternativa (Jina, TEI propio):
+[`PROVEEDORES-RERANK.md`](PROVEEDORES-RERANK.md). Funcionamiento y medición:
+[`RERANK.md`](RERANK.md).
 
 #### Probar sin gastar créditos
 
@@ -109,8 +133,31 @@ python -m scripts.export_openai_embeddings
 cd web
 npm install
 npm run build
-npm run dev:vercel     # http://localhost:3000  (frontend + /api/*)
+npm run dev:vercel            # http://localhost:3000  (frontend + /api/*)
+
+# Reproduciendo un Root Directory = repositorio (funciones en api/ de la raíz):
+MODO_RAIZ=1 PORT=3099 node scripts/dev-vercel.mjs
 ```
+
+Se le pueden pasar las mismas variables que en Vercel para probar la
+configuración completa antes de subirla:
+
+```bash
+EMBEDDINGS_API_KEY=hf_... \
+DEEPSEEK_API_KEY=sk-... \
+RERANK_API_URL=https://api.deepinfra.com/v1/inference/Qwen/Qwen3-Reranker-0.6B \
+RERANK_API_KEY=... \
+MODO_RAIZ=1 PORT=3099 node scripts/dev-vercel.mjs
+```
+
+Y en otra terminal, el mismo verificador que se usa contra el despliegue real:
+
+```bash
+python -m scripts.verificar_despliegue http://127.0.0.1:3099
+```
+
+El emulador sirve tanto si el despliegue usa Root Directory `web` como la raíz
+del repositorio, así que una prueba en local anticipa lo que hará Vercel.
 
 ## Modo B — Backend dedicado (Weaviate + BGE-M3 + FastAPI)
 

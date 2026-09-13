@@ -167,16 +167,22 @@ function leerPuntajes(cfg, datos, n) {
 /**
  * Reordena `items` según su relevancia real para `consulta`.
  *
+ * Devuelve `null` —y **no** la lista original— cuando no se pudo reordenar:
+ * sin proveedor configurado, con el rerank desactivado, con menos de dos
+ * candidatos o si la llamada falla. Es deliberado: quien llama necesita poder
+ * distinguir «se reordenó» de «se intentó y no se pudo», porque informar de un
+ * rerank que no ocurrió es peor que no informarlo.
+ *
  * @param {string} consulta
  * @param {Array<{texto:string}>} items  candidatos ya recuperados, en orden
  * @param {{limit?:number}} opciones
- * @returns {Promise<Array>} los mismos objetos, reordenados y recortados.
- *   Si el rerank no está disponible o falla, devuelve `items` tal cual.
+ * @returns {Promise<Array|null>} los mismos objetos reordenados y recortados,
+ *   o `null` si no se reordenó.
  */
 export async function reordenar(consulta, items, opciones = {}) {
   const cfg = rerankConfig()
-  if (!cfg || process.env.RERANK_ACTIVO === 'false') return items
-  if (!Array.isArray(items) || items.length < 2) return items
+  if (!cfg || process.env.RERANK_ACTIVO === 'false') return null
+  if (!Array.isArray(items) || items.length < 2) return null
 
   const limit = Math.min(Math.max(opciones.limit || 5, 1), 50)
   const documentos = items.map((it) => (it.texto || '').slice(0, MAX_CARACTERES))
@@ -193,7 +199,7 @@ export async function reordenar(consulta, items, opciones = {}) {
     })
   } catch (e) {
     console.warn(`[rerank] no se pudo contactar al proveedor: ${e.message}`)
-    return items
+    return null
   }
 
   if (!resp.ok) {
@@ -204,7 +210,7 @@ export async function reordenar(consulta, items, opciones = {}) {
       /* sin cuerpo legible */
     }
     console.warn(`[rerank] HTTP ${resp.status}${detalle ? ` · ${detalle}` : ''}`)
-    return items
+    return null
   }
 
   let datos
@@ -212,13 +218,13 @@ export async function reordenar(consulta, items, opciones = {}) {
     datos = await resp.json()
   } catch {
     console.warn('[rerank] respuesta ilegible')
-    return items
+    return null
   }
 
   const puntajes = leerPuntajes(cfg, datos, items.length)
   if (!puntajes) {
     console.warn('[rerank] respuesta sin puntajes utilizables')
-    return items
+    return null
   }
 
   return items

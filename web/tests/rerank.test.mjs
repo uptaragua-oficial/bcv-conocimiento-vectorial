@@ -95,16 +95,14 @@ test('sin proveedor configurado el orden no se toca', async () => {
   delete process.env.RERANK_API_URL
   assert.equal(rerankConfig(), null)
   assert.equal(rerankDisponible(), false)
-  const salida = await reordenar('operador cambiario', ITEMS, { limit: 3 })
-  assert.deepEqual(salida.map((i) => i.doc_id), ['a', 'b', 'c'])
+  assert.equal(await reordenar('operador cambiario', ITEMS, { limit: 3 }), null)
 })
 
 test('RERANK_ACTIVO=false lo desactiva aunque haya proveedor', async () => {
   process.env.RERANK_API_URL = `${base}/rerank`
   process.env.RERANK_ACTIVO = 'false'
   assert.equal(rerankDisponible(), false)
-  const salida = await reordenar('operador cambiario', ITEMS, { limit: 3 })
-  assert.deepEqual(salida.map((i) => i.doc_id), ['a', 'b', 'c'])
+  assert.equal(await reordenar('operador cambiario', ITEMS, { limit: 3 }), null)
   delete process.env.RERANK_ACTIVO
 })
 
@@ -202,10 +200,9 @@ test('DeepInfra: envía la instrucción cuando está configurada', async () => {
 test('DeepInfra: si los scores no cuadran con los documentos, no se toca el orden', async () => {
   process.env.RERANK_API_URL = `${base}/inference`
   modoRespuesta = 'desalineado'
-  const salida = await reordenar('operador cambiario', ITEMS, { limit: 3 })
-  assert.deepEqual(
-    salida.map((i) => i.doc_id),
-    ['a', 'b', 'c'],
+  assert.equal(
+    await reordenar('operador cambiario', ITEMS, { limit: 3 }),
+    null,
     'un desalineamiento daría puntajes a los documentos equivocados',
   )
   modoRespuesta = 'ok'
@@ -219,7 +216,9 @@ test('recorta el texto enviado al proveedor', async () => {
   assert.equal(ultimaPeticion.documents[0].length, 2000)
 })
 
-test('si el proveedor falla, se conserva el orden original', async () => {
+test('si el proveedor falla, se informa de que NO se reordenó', async () => {
+  // Devolver la lista intacta haría creer que el rerank se aplicó. `null` obliga
+  // a quien llama a decirlo con honestidad.
   for (const [url, etiqueta] of [
     [`${base}/rerank`, 'estándar'],
     [`${base}/inference`, 'deepinfra'],
@@ -227,10 +226,9 @@ test('si el proveedor falla, se conserva el orden original', async () => {
     process.env.RERANK_API_URL = url
     for (const modo of ['error', 'basura', 'vacio']) {
       modoRespuesta = modo
-      const salida = await reordenar('operador cambiario', ITEMS, { limit: 3 })
-      assert.deepEqual(
-        salida.map((i) => i.doc_id),
-        ['a', 'b', 'c'],
+      assert.equal(
+        await reordenar('operador cambiario', ITEMS, { limit: 3 }),
+        null,
         `${etiqueta} · modo ${modo}: debe degradar sin romper`,
       )
     }
@@ -238,20 +236,18 @@ test('si el proveedor falla, se conserva el orden original', async () => {
   modoRespuesta = 'ok'
 })
 
-test('si el proveedor no responde, se conserva el orden original', async () => {
+test('si el proveedor no responde, se informa de que NO se reordenó', async () => {
   for (const url of ['http://127.0.0.1:1/rerank', 'http://127.0.0.1:1/inference']) {
     process.env.RERANK_API_URL = url
-    const salida = await reordenar('operador cambiario', ITEMS, { limit: 3 })
-    assert.deepEqual(salida.map((i) => i.doc_id), ['a', 'b', 'c'])
+    assert.equal(await reordenar('operador cambiario', ITEMS, { limit: 3 }), null)
   }
 })
 
 test('con menos de dos candidatos no se llama al proveedor', async () => {
   process.env.RERANK_API_URL = `${base}/rerank`
   ultimaPeticion = null
-  const salida = await reordenar('x', [ITEMS[0]], { limit: 5 })
+  assert.equal(await reordenar('x', [ITEMS[0]], { limit: 5 }), null)
   assert.equal(ultimaPeticion, null)
-  assert.deepEqual(salida.map((i) => i.doc_id), ['a'])
 })
 
 test('RERANK_CANDIDATOS se acota a un rango razonable', () => {
