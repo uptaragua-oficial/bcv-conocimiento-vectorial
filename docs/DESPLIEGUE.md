@@ -136,7 +136,45 @@ curl -s -X POST https://<tu-app>.vercel.app/api/search \
 Y en el portal, la cabecera muestra las etiquetas **Búsqueda híbrida** y
 **Rerank** cuando ambas están activas.
 
-### Rerank
+### Rerank sin pagar un proveedor
+
+El modelo de rerank no cabe en una función serverless (2,2 GB frente al límite de
+250 MB) ni entra en su tiempo de ejecución (16 s por consulta en CPU). Pero si
+tienes una GPU en la máquina del proyecto, no hace falta contratar nada: se
+ejecuta **el cross-encoder en local** y se publica con un túnel.
+
+```bash
+./scripts/rerank_local.sh
+```
+
+Levanta `bge-reranker-v2-m3` (con GPU si la hay), abre un túnel de Cloudflare,
+comprueba el endpoint público e **imprime las dos variables listas para pegar**
+en Vercel. Genera una clave aleatoria por sesión, así que el túnel no queda
+abierto. Deja esa terminal abierta: si el túnel cae, el portal sigue
+funcionando, solo que sin reordenar.
+
+Ventajas: coste cero, sin cuentas nuevas, y los datos no salen de la máquina. Es
+además un ensayo de la arquitectura on-premise
+([`ARQUITECTURA-ON-PREMISE.md`](ARQUITECTURA-ON-PREMISE.md)).
+Inconveniente: la máquina debe estar encendida mientras se use el portal.
+
+Alternativa si no quieres depender de que tu máquina esté encendida: **Jina AI**
+habla el formato estándar y da tokens gratuitos al registrarte.
+
+```bash
+RERANK_API_URL=https://api.jina.ai/v1/rerank
+RERANK_API_KEY=<tu clave de Jina>
+RERANK_MODEL=jina-reranker-v3.5
+```
+
+> **El rerank no es opcional para esta consulta.** Medido sin cross-encoder:
+> α=0.7 deja el Art. 12 en el puesto 20; usar RRF solo para elegir candidatos y
+> la fusión lineal para ordenarlos, en el 16; unión de candidatos, en el 20. Solo
+> RRF puro lo mete en el top-5 (puesto 4), a cambio de bajar el nDCG@5 del
+> conjunto de evaluación de 0.921 a 0.815. **Ninguna fusión lo resuelve.**
+
+### Rerank con un proveedor externo
+
 
 El modelo de rerank no cabe en una función serverless (2,2 GB frente al límite de
 250 MB) ni en su tiempo de ejecución, así que se delega en DeepInfra. El portal
