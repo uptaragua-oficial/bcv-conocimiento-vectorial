@@ -327,18 +327,27 @@ def probar_rerank() -> bool:
         aviso("RERANK_API_URL no está definida: el portal no reordenará")
         return False
 
-    es_deepinfra = "deepinfra.com" in url or "/inference" in url
-    modelo = (os_environ("RERANK_MODEL") or "").strip()
+    # Mismo criterio que el cliente del portal (web/api/_lib/rerank.js): cada
+    # proveedor tiene su catálogo y mandar el modelo de otro da un 404 confuso.
+    bajo = url.lower()
+    es_deepinfra = "deepinfra.com" in bajo or "/inference" in bajo
+    por_defecto = (
+        "Qwen/Qwen3-Reranker-0.6B" if es_deepinfra
+        else "jina-reranker-v3.5" if "jina.ai" in bajo
+        else "BAAI/bge-reranker-v2-m3"
+    )
+    modelo = (os_environ("RERANK_MODEL") or por_defecto).strip()
     destino = url.rstrip("/")
     if es_deepinfra:
         if "{model}" in destino:
-            destino = destino.replace("{model}", modelo or "Qwen/Qwen3-Reranker-0.6B")
+            destino = destino.replace("{model}", modelo)
         elif not destino.split("/inference")[-1].strip("/"):
-            destino = f"{destino}/{modelo or 'Qwen/Qwen3-Reranker-0.6B'}"
+            destino = f"{destino}/{modelo}"
         cuerpo = {"queries": ["prueba"], "documents": ["documento uno", "documento dos"]}
     else:
-        cuerpo = {"model": modelo or "BAAI/bge-reranker-v2-m3", "query": "prueba",
+        cuerpo = {"model": modelo, "query": "prueba",
                   "documents": ["documento uno", "documento dos"], "top_n": 2}
+    print(color(f"    modelo: {modelo}", GRIS))
 
     print(color(f"    endpoint: {destino}", GRIS))
     codigo, datos = peticion(destino, metodo="POST", cuerpo=cuerpo, cabeceras={"Authorization": f"Bearer {clave}"})

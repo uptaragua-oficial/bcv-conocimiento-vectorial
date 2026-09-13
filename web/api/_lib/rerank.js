@@ -37,8 +37,9 @@
  *   RERANK_API_URL     endpoint del proveedor (obligatoria para activarlo)
  *   RERANK_API_KEY     clave del proveedor
  *   RERANK_FORMATO     auto | estandar | deepinfra   (por defecto: auto)
- *   RERANK_MODEL       modelo (por defecto: bge-reranker-v2-m3, o
- *                      Qwen3-Reranker-0.6B si el proveedor es DeepInfra)
+ *   RERANK_MODEL       modelo; si no se indica, se elige según el proveedor
+ *                      (Jina → jina-reranker-v3.5, DeepInfra →
+ *                      Qwen/Qwen3-Reranker-0.6B, resto → bge-reranker-v2-m3)
  *   RERANK_CANDIDATOS  candidatos a recuperar antes de reordenar (por defecto 30)
  *   RERANK_ACTIVO      "false" lo desactiva aunque haya proveedor
  *   RERANK_INSTRUCTION solo DeepInfra: instrucción que orienta la tarea
@@ -47,10 +48,25 @@
 /** Recorta el texto enviado al proveedor: acota coste y latencia. */
 const MAX_CARACTERES = 2000
 
-/** Modelo por defecto de cada formato. */
+/** Modelo por defecto de cada proveedor, para no tener que acertarlo a mano. */
 const MODELO_POR_DEFECTO = {
-  estandar: 'BAAI/bge-reranker-v2-m3',
   deepinfra: 'Qwen/Qwen3-Reranker-0.6B',
+  jina: 'jina-reranker-v3.5',
+  estandar: 'BAAI/bge-reranker-v2-m3',
+}
+
+/**
+ * Deduce el proveedor a partir de la URL.
+ *
+ * No cambia el protocolo (para eso está `detectarFormato`), solo permite elegir
+ * un modelo por defecto sensato: cada proveedor tiene su propio catálogo y
+ * mandar el nombre de otro devuelve un 404 que cuesta media hora entender.
+ */
+export function detectarProveedor(url) {
+  const u = (url || '').toLowerCase()
+  if (/deepinfra\.com|\/inference(\/|$)/.test(u)) return 'deepinfra'
+  if (/jina\.ai/.test(u)) return 'jina'
+  return 'estandar'
 }
 
 /**
@@ -62,9 +78,7 @@ const MODELO_POR_DEFECTO = {
 export function detectarFormato(valor, url) {
   const explicito = (valor || '').trim().toLowerCase()
   if (explicito === 'estandar' || explicito === 'deepinfra') return explicito
-  // `/inference` puede venir sin barra final (…/v1/inference) o con el modelo
-  // ya pegado (…/v1/inference/Qwen/Qwen3-Reranker-8B).
-  return /deepinfra\.com|\/inference(\/|$)/i.test(url || '') ? 'deepinfra' : 'estandar'
+  return detectarProveedor(url) === 'deepinfra' ? 'deepinfra' : 'estandar'
 }
 
 /**
@@ -99,8 +113,10 @@ export function rerankConfig() {
   const url = (process.env.RERANK_API_URL || '').trim()
   if (!url) return null
 
+  const proveedor = detectarProveedor(url)
   const formato = detectarFormato(process.env.RERANK_FORMATO, url)
-  const modeloPedido = (process.env.RERANK_MODEL || MODELO_POR_DEFECTO[formato]).trim()
+  const porDefecto = MODELO_POR_DEFECTO[proveedor] || MODELO_POR_DEFECTO.estandar
+  const modeloPedido = (process.env.RERANK_MODEL || porDefecto).trim()
   const { url: destino, modelo } = resolverDestino(url, formato, modeloPedido)
 
   const candidatos = Number(process.env.RERANK_CANDIDATOS || 30)
@@ -108,6 +124,7 @@ export function rerankConfig() {
     url: destino,
     modelo,
     formato,
+    proveedor,
     clave: (process.env.RERANK_API_KEY || '').trim(),
     candidatos: Number.isFinite(candidatos) ? Math.min(Math.max(candidatos, 10), 100) : 30,
     instruccion: (process.env.RERANK_INSTRUCTION || '').trim(),

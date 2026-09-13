@@ -45,7 +45,7 @@ No requiere HuggingFace, ni túneles, ni servidores.
    |---|---|---|
    | `EMBEDDINGS_API_KEY` | token de Hugging Face (**`hf_…`**) | Vectorizar la consulta con `multilingual-e5-large`, el mismo modelo de los vectores del corpus |
    | `RERANK_API_KEY` | token de DeepInfra | Reordenar los candidatos con el cross-encoder |
-   | `RERANK_API_URL` | `https://api.deepinfra.com/v1/inference/Qwen/Qwen3-Reranker-0.6B` | Endpoint del rerank |
+   | `RERANK_API_URL` | `https://api.jina.ai/v1/rerank` | Endpoint del rerank. El modelo se deduce de la URL |
    | `DEEPSEEK_API_KEY` | clave de DeepSeek (**`sk-…`**) | Redactar la respuesta. Sin ella, responde en modo extractivo |
 
 4. **Deploy.**
@@ -159,13 +159,22 @@ además un ensayo de la arquitectura on-premise
 Inconveniente: la máquina debe estar encendida mientras se use el portal.
 
 Alternativa si no quieres depender de que tu máquina esté encendida: **Jina AI**
-habla el formato estándar y da tokens gratuitos al registrarte.
+habla el formato estándar y da tokens gratuitos al registrarte. Solo hacen falta
+dos variables: el modelo se elige solo a partir de la URL.
 
 ```bash
 RERANK_API_URL=https://api.jina.ai/v1/rerank
 RERANK_API_KEY=<tu clave de Jina>
-RERANK_MODEL=jina-reranker-v3.5
 ```
+
+Los modelos disponibles son `jina-reranker-v3.5` (por defecto), `jina-reranker-v3`,
+`jina-reranker-v2-base-multilingual` y `jina-reranker-m0`. Si necesitas fijar
+otro, usa `RERANK_MODEL`.
+
+> **Nota para el BCV:** `jina-reranker-v3.5` y `v3` son modelos **derivados de
+> Qwen**; `jina-reranker-v2-base-multilingual` es la alternativa **no-Qwen** y
+> `jina-reranker-v1-*` sigue siendo Apache-2.0. Conviene revisar la licencia
+> antes de un despliegue institucional.
 
 > **El rerank no es opcional para esta consulta.** Medido sin cross-encoder:
 > α=0.7 deja el Art. 12 en el puesto 20; usar RRF solo para elegir candidatos y

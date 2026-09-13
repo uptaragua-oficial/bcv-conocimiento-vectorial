@@ -16,9 +16,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
-const { reordenar, rerankConfig, rerankDisponible, detectarFormato } = await import(
-  join(RAIZ, 'api/_lib/rerank.js')
-)
+const { reordenar, rerankConfig, rerankDisponible, detectarFormato, detectarProveedor } =
+  await import(join(RAIZ, 'api/_lib/rerank.js'))
 
 let servidor
 let base
@@ -171,6 +170,41 @@ test('DeepInfra: admite el marcador {model} en la URL', async () => {
   const cfg = rerankConfig()
   assert.equal(cfg.url, `${base}/inference/Qwen/Qwen3-Reranker-0.6B`)
   assert.equal(cfg.modelo, 'Qwen/Qwen3-Reranker-0.6B')
+})
+
+// ---------------- Formato estándar de Jina ----------------
+test('Jina: se reconoce por la URL y usa su propio modelo por defecto', () => {
+  assert.equal(detectarProveedor('https://api.jina.ai/v1/rerank'), 'jina')
+  assert.equal(detectarFormato('', 'https://api.jina.ai/v1/rerank'), 'estandar')
+
+  process.env.RERANK_API_URL = 'https://api.jina.ai/v1/rerank'
+  delete process.env.RERANK_MODEL
+  const cfg = rerankConfig()
+  // Sin esto habría que acertar el nombre del modelo, y mandar el de otro
+  // proveedor devuelve un 404 difícil de interpretar.
+  assert.equal(cfg.modelo, 'jina-reranker-v3.5')
+  assert.equal(cfg.url, 'https://api.jina.ai/v1/rerank', 'la URL no se toca')
+  assert.equal(cfg.formato, 'estandar')
+  assert.equal(cfg.proveedor, 'jina')
+})
+
+test('Jina: RERANK_MODEL tiene prioridad sobre el valor por defecto', () => {
+  process.env.RERANK_API_URL = 'https://api.jina.ai/v1/rerank'
+  process.env.RERANK_MODEL = 'jina-reranker-v2-base-multilingual'
+  assert.equal(rerankConfig().modelo, 'jina-reranker-v2-base-multilingual')
+  delete process.env.RERANK_MODEL
+})
+
+test('Jina: envía el cuerpo del formato estándar', async () => {
+  process.env.RERANK_API_URL = `${base}/rerank`
+  process.env.RERANK_MODEL = 'jina-reranker-v3.5'
+  modoRespuesta = 'ok'
+  const salida = await reordenar('operador cambiario', ITEMS, { limit: 2 })
+  assert.equal(ultimaPeticion.model, 'jina-reranker-v3.5')
+  assert.equal(ultimaPeticion.top_n, 2)
+  assert.ok(Array.isArray(ultimaPeticion.documents))
+  assert.deepEqual(salida.map((i) => i.doc_id), ['b', 'a'])
+  delete process.env.RERANK_MODEL
 })
 
 test('DeepInfra: el modelo por defecto es Qwen3-Reranker-0.6B', () => {
