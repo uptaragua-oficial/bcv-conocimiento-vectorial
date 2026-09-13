@@ -1,95 +1,104 @@
 # Comparativa de modelos de embeddings
 
-Medición **real** sobre el corpus jurídico del BCV (2 083 fragmentos), con el
-mismo conjunto de 40 consultas para todos los modelos, derivado de forma
-determinista (semilla fija) para que la comparación sea justa.
+Medición **real** sobre el corpus jurídico del BCV (2 083 fragmentos). Todos los
+modelos se miden con el **mismo** conjunto de consultas, derivado de forma
+determinista del corpus (semilla fija), para que la comparación sea justa.
 
-- **k = 5**
-- Métricas: recall@5, MRR y nDCG@5
-- Reproducible con:
-  `python -m scripts.comparar_recuperacion --conjunto … --conjunto …`
+Reproducible con:
+
+```bash
+python -m scripts.comparar_recuperacion --k 5 --consultas 150 \
+  --conjunto bge-m3:data/processed/vectores_bge-m3.f32:data/processed/vectores_bge-m3.meta.json \
+  --conjunto e5:data/processed/vectores_e5.f32:data/processed/vectores_e5.meta.json
+```
 
 ---
 
-## Resultados
+## 1. Resultado principal (150 consultas)
+
+| Estrategia | recall@5 | MRR | nDCG@5 |
+|---|---:|---:|---:|
+| BM25 (léxico) | 0.933 | 0.835 | 0.860 |
+| BGE-M3 · densa | 0.773 | 0.618 | 0.657 |
+| **BGE-M3 · híbrida** (α=0.5) | **0.953** | **0.855** | **0.879** |
+| e5-large · densa | 0.547 | 0.404 | 0.440 |
+| e5-large · híbrida (α=0.5) | 0.947 | 0.853 | 0.877 |
+
+---
+
+## 2. OpenAI `text-embedding-3-small` (40 consultas)
+
+Se midió desde Colab, con un conjunto de 40 consultas (no 150), así que sus
+valores **no** son directamente comparables a la tabla anterior. Lo que sí es
+válido es compararlo **dentro de su propio conjunto**:
 
 | Estrategia | recall@5 | MRR | nDCG@5 |
 |---|---:|---:|---:|
 | BM25 (léxico) | 0.900 | 0.796 | 0.821 |
-| BGE-M3 · densa | 0.725 | 0.568 | 0.607 |
-| **BGE-M3 · híbrida** | **0.975** | **0.850** | **0.881** |
-| e5-large · densa | 0.600 | 0.456 | 0.492 |
-| e5-large · híbrida | 0.925 | 0.828 | 0.852 |
+| OpenAI · densa | 0.650 | 0.592 | 0.607 |
+| OpenAI · híbrida (α=0.5) | 0.875 | 0.803 | 0.820 |
 
-*(pendiente: fila de OpenAI con `text-embedding-3-small`, ejecutable desde Colab
-con `--api`)*
+**En el mismo conjunto de 40 consultas:** BM25 daba 0.821 y OpenAI híbrida 0.820.
+Es decir, **OpenAI no aportó ninguna mejora** — de hecho bajó el recall (0.900 →
+0.875), porque la fusión arrastró el ranking hacia un componente denso más débil.
 
 ---
 
-## Qué dicen los números
+## 3. Conclusiones
 
-### 1. La búsqueda híbrida sí mejora — y bastante
+### La búsqueda híbrida mejora a BM25, pero poco
 
-| | BM25 solo | BGE-M3 híbrida | Diferencia |
-|---|---:|---:|---:|
-| recall@5 | 0.900 | **0.975** | **+0.075** |
-| nDCG@5 | 0.821 | **0.881** | +0.060 |
+Con 150 consultas: nDCG@5 pasa de **0.860 → 0.879** y recall@5 de **0.933 → 0.953**.
+Es una mejora real, aunque modesta (~+0.02). Cuando la línea base léxica ya es
+muy alta, el margen es estrecho.
 
-Es la conclusión más importante: **combinar lo léxico con lo semántico supera a
-cualquiera de los dos por separado**. Vale la pena activar los embeddings.
+### La búsqueda densa sola es claramente peor que BM25
 
-### 2. La búsqueda densa sola es *peor* que BM25
+0.657 (BGE-M3) y 0.440 (e5) frente a 0.860 de BM25. En un corpus jurídico los
+términos exactos («Artículo 31», «encaje legal», siglas) pesan muchísimo.
 
-Un resultado contraintuitivo pero consistente: BGE-M3 densa (0.607) y e5 densa
-(0.492) quedan **por debajo** de BM25 (0.821). Tiene sentido en un corpus
-jurídico: los términos exactos («Artículo 31», «encaje legal», siglas) pesan
-mucho, y el vocabulario es muy específico.
+> **Implicación práctica:** nunca actives solo la búsqueda semántica. Siempre
+> híbrida, y con `alpha ≈ 0.5`, que es el valor por defecto del portal.
 
-**Implicación práctica:** nunca conviene activar solo la búsqueda semántica;
-siempre híbrida con `alpha ≈ 0.5`.
+### BGE-M3 y e5-large están empatados en híbrida
 
-### 3. BGE-M3 es mejor modelo que e5-large
+**0.879 frente a 0.877.** La diferencia es ruido, no señal. Sí hay diferencia en
+la parte densa (0.657 vs 0.440), pero al fusionar se diluye.
 
-- Híbrida: **0.881 vs 0.852**
-- Densa: **0.607 vs 0.492**
+### El `alpha` importa menos de lo que parecía
 
-BGE-M3 gana en las dos. Es coherente con que sea un modelo más reciente y
-específicamente orientado a recuperación multilingüe.
+Barrido con 40 consultas:
 
-### 4. Pero e5-large cuesta cero fricción
+| alpha | BGE-M3 híbrida | e5 híbrida |
+|---|---:|---:|
+| 0.3 | 0.874 | 0.854 |
+| 0.5 | 0.881 | 0.852 |
+| 0.7 | 0.836 | 0.892 |
 
-| Modelo | Proveedor en ejecución | Qué hace falta |
+e5 parecía ganar con α=0.7 (**0.892**), pero al repetir con 150 consultas
+α=0.5 dio **0.877** y α=0.7 dio **0.874**. **La ventaja era ruido del conjunto
+pequeño.** Con 40 consultas, diferencias por debajo de ~0.03 no son fiables.
+
+### OpenAI no aporta en este corpus
+
+Quedó al nivel de BM25 en su propio conjunto y por debajo de BGE-M3 y e5. No
+justifica su coste aquí.
+
+---
+
+## 4. Recomendación
+
+| Objetivo | Elección | Motivo |
 |---|---|---|
-| BGE-M3 | DeepInfra (`BAAI/bge-m3`) | Crear cuenta gratuita |
-| e5-large | HuggingFace | **El token que ya tienes** |
+| **Máximo rendimiento** | BGE-M3 híbrida | 0.879, el mejor (empate técnico con e5) |
+| **Sin cuentas nuevas** | **e5-large híbrida** | 0.877, con el token de HuggingFace que ya tienes |
+| **Sin dependencias** | BM25 | 0.860, sin claves, sin coste, sin latencia extra |
+| **OpenAI** | ❌ No usarlo | 0.820: no mejora a BM25 y cuesta dinero |
 
-La diferencia (0.881 vs 0.852) es real pero modesta: **ambos superan a BM25**.
+**En la práctica: quédate con e5-large.** Empata con BGE-M3 en la modalidad que
+se usa de verdad (híbrida) y funciona con el token que ya tienes, sin crear
+cuentas ni pagar. BGE-M3 solo se justifica si en el futuro se quiere usar la
+búsqueda densa sola, donde sí es bastante mejor (0.657 vs 0.440).
 
----
-
-## Recomendación
-
-| Situación | Elección |
-|---|---|
-| Quieres el máximo rendimiento | **BGE-M3 híbrida** + DeepInfra |
-| No quieres crear más cuentas | **e5-large híbrida** + tu token de HuggingFace |
-| Ninguna de las dos te convence | BM25 (0.821): ya funciona y no depende de nadie |
-
-En todos los casos el portal **cae a BM25 automáticamente** si el proveedor
-falla, así que activar los embeddings no añade riesgo.
-
----
-
-## Cómo añadir la fila de OpenAI
-
-Desde Colab (que sale por una región admitida), con el vectorizador ya ejecutado:
-
-```bash
-python -m scripts.comparar_recuperacion \
-  --vectores web/api/_data/vectors.f32 \
-  --meta     web/api/_data/embeddings_meta.json \
-  --nombre   openai-3-small \
-  --api
-```
-
-Usa el mismo conjunto de 40 consultas, así que la comparación es directa.
+En cualquier caso el portal **cae a BM25 automáticamente** si el proveedor falla,
+así que activar los embeddings no añade riesgo.
