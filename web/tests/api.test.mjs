@@ -56,7 +56,7 @@ test('la lematización une plurales y géneros del español', () => {
 
   // Pero no fusiona palabras distintas
   assert.notDeepEqual(tokenizar('autoridad'), tokenizar('autorizado'))
-  assert.notDeepEqual(tokenizar('sistema'), tokenizar('sistematico'))
+  assert.notDeepEqual(tokenizar('norma'), tokenizar('normativo'))
 })
 
 // ---------------- Endpoints ----------------
