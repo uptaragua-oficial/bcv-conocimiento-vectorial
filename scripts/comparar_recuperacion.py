@@ -99,11 +99,20 @@ def construir_evaluacion(docs: list[list], n: int) -> list[dict]:
 # Estrategias
 # ----------------------------------------------------------------------
 def tokenizar(texto: str) -> list[str]:
+    """Igual que la implementación de Vercel: sin acentos y recortado a raíz."""
     import unicodedata
 
     t = unicodedata.normalize("NFD", (texto or "").lower())
     t = "".join(c for c in t if not unicodedata.combining(c))
-    return re.findall(r"[a-z0-9]{2,}", t)
+    return [raiz(p) for p in re.findall(r"[a-z0-9]{2,}", t)]
+
+
+LARGO_RAIZ = 7
+
+
+def raiz(token: str) -> str:
+    """Recorta a 7 caracteres para unir plurales y géneros del español."""
+    return token[:LARGO_RAIZ] if len(token) > LARGO_RAIZ else token
 
 
 def indice_bm25(docs: list[list]) -> dict:

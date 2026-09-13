@@ -102,3 +102,47 @@ búsqueda densa sola, donde sí es bastante mejor (0.657 vs 0.440).
 
 En cualquier caso el portal **cae a BM25 automáticamente** si el proveedor falla,
 así que activar los embeddings no añade riesgo.
+
+---
+
+## 5. Lematización ligera del buscador léxico
+
+Una consulta **real** de un usuario falló:
+
+> «¿Qué requisitos exige el BCV para ser operador cambiario autorizado?»
+> → el asistente respondió que el contexto no contenía la información.
+
+Y sí la contenía: el **Artículo 12** dice «quedan autorizados para actuar como
+operadores cambiarios».
+
+**Causa.** La consulta usa *operador · cambiario · autorizado* y el artículo dice
+*operadores · cambiarios · autorizados*. Sin lematización, BM25 los trata como
+términos diferentes:
+
+| | antes | después |
+|---|---:|---:|
+| Art. 12 en BM25 | puesto **148** de 2 083 | puesto **5** |
+| Art. 12 en híbrida | **fuera del top-10** | **4.º** |
+
+El denso sí lo encontraba (puesto 4), pero la fusión lo arrastraba fuera porque
+su puntaje léxico era bajísimo.
+
+**Solución.** Recortar cada término a 7 caracteres, lo que une plurales y géneros
+del español sin fusionar palabras distintas («autoridad» → `autorid`,
+«autorizado» → `autoriz`). Verificado con cinco formulaciones distintas: el
+artículo queda en el **top-5 en todas**.
+
+**Efecto sobre el conjunto *silver*.** Las métricas agregadas bajan levemente:
+BM25 0.860 → 0.852 y e5 híbrida 0.877 → 0.872. Es esperable y no invalida el
+cambio: el conjunto *silver* se genera a partir del propio texto del corpus, así
+que ya tiene coincidencia léxica exacta y **no puede reflejar** esta mejora. La
+diferencia (−0.008) está dentro del error de muestreo de 150 consultas (±0.028),
+mientras que la mejora en la consulta real es inequívoca.
+
+**Lección metodológica:** un conjunto de evaluación derivado del corpus premia la
+coincidencia exacta y puede esconder mejoras que sí importan en consultas
+humanas. Conviene complementarlo con consultas reales.
+
+**Se mantiene la lematización**, aplicada de forma idéntica en el buscador de
+Vercel y en este comparador para que las mediciones sigan siendo comparables.
+

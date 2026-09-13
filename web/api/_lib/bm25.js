@@ -9,15 +9,31 @@
 const K1 = 1.2;
 const B = 0.75;
 
-/** Tokeniza normalizando acentos y descartando ruido. */
+/**
+ * Longitud a la que se recorta cada palabra para agrupar variantes.
+ *
+ * Sin esto, «operador» y «operadores» son términos distintos para BM25, y una
+ * consulta sobre «requisitos del operador cambiario autorizado» no encontraba
+ * el artículo que dice «quedan autorizados para actuar como operadores
+ * cambiarios». El recorte a 7 caracteres une plurales y géneros del español
+ * («autorizado/autorizados», «cambiario/cambiarios») sin fusionar palabras
+ * distintas («autoridad» → «autorid», «autorizado» → «autoriz»).
+ */
+const LARGO_RAIZ = 7;
+
+function raiz(token) {
+  return token.length > LARGO_RAIZ ? token.slice(0, LARGO_RAIZ) : token;
+}
+
+/** Tokeniza normalizando acentos, recortando a raíz y descartando ruido. */
 function tokenizar(texto) {
-  return (
+  const palabras =
     (texto || '')
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .match(/[a-z0-9]{2,}/g) || []
-  );
+      .match(/[a-z0-9]{2,}/g) || [];
+  return palabras.map(raiz);
 }
 
 /** Construye el índice invertido y las estadísticas de longitud. */
