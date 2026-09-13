@@ -23,7 +23,7 @@ por qué la configuración por defecto es **DeepInfra**.
 | Límite de tasa | **200 peticiones concurrentes por modelo** | 100 RPM y 100 000 TPM (nivel gratuito) |
 | Contexto por documento | hasta 32 768 tokens | 1 024 tokens en v2-base (con troceado) |
 | Sirve también embeddings | **sí** (§6) | sí |
-| Calidad medida en este corpus | **6/7** consultas reales en el top-5 con su modelo más barato (§5) | no medida: requiere cuenta |
+| Calidad medida en este cuerpo | **6/7** con su modelo más barato (§5) | **7/7** con `jina-reranker-v3.5` en el portal desplegado |
 
 **Recomendación: DeepInfra.** Por tres razones concretas, no por preferencia.
 
@@ -158,9 +158,14 @@ decisión —en producción el cómputo lo hace el proveedor— pero explica por
 esta comparación se hizo con 7 consultas reales y no con las 40 del conjunto
 *silver*: 45 minutos por modelo en vez de 8.
 
-**Lo que no se pudo medir.** `jina-reranker-v3.5` no se puede ejecutar en local
-sin cuenta, así que su calidad no está contrastada aquí. Se compara por
-características, precio y límites, no por resultados sobre este corpus.
+**Lo que no se pudo medir.** `jina-reranker-v3.5` no se puede ejecutar en local,
+así que su calidad no se midió aquí. **Sí se midió después, contra el portal ya
+desplegado y con cuenta propia: 7/7**, el mismo resultado que `bge-reranker-v2-m3`
+en local, con 337-502 ms por búsqueda. Ver [`RERANK.md`](RERANK.md).
+
+> Es una diferencia práctica a tener en cuenta: un proveedor por API se puede
+> **medir sin ejecutarlo**, atacando el despliegue real. Eso convierte la elección
+> de proveedor en una comparación con datos propios y no en una apuesta.
 
 ## 6. La razón de fondo: una sola cuenta para todo
 

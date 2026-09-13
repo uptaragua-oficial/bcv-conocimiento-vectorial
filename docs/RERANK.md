@@ -153,15 +153,39 @@ que **esté** en la lista, y eso es lo que arregla α=0.7.
 Medido sobre los mismos candidatos (α=0.7, 20 candidatos), con el artículo
 objetivo en las siete consultas reales:
 
-| Modelo | En el top-5 | nDCG@5 *silver* |
-|---|---:|---:|
-| `BAAI/bge-reranker-v2-m3` | **7/7** | 0.9259 |
-| `Qwen/Qwen3-Reranker-0.6B` | 6/7 | no medido |
+| Modelo | En el top-5 | Dónde se midió |
+|---|---:|---|
+| `BAAI/bge-reranker-v2-m3` | **7/7** | en local, ejecutando el modelo |
+| `jina-reranker-v3.5` | **7/7** | **en el portal desplegado**, vía API |
+| `Qwen/Qwen3-Reranker-0.6B` | 6/7 | en local |
 
-El modelo más barato de DeepInfra rinde al nivel del `bge-reranker-v2-m3` local
-—y en la consulta original lo coloca primero— así que no hay que sacrificar
-calidad por usar un proveedor externo. El detalle, con precios y límites, está
-en [`PROVEEDORES-RERANK.md`](PROVEEDORES-RERANK.md).
+Los tres modelos dejan el artículo en el top-5 de las siete formulaciones. El más
+barato de DeepInfra y el de Jina rinden al nivel del `bge-reranker-v2-m3` local,
+así que no hay que sacrificar calidad por usar un proveedor externo.
+
+### Medición sobre el portal desplegado (Jina v3.5)
+
+Siete formulaciones contra `https://bcv-conocimiento-vectorial.vercel.app`, con
+embeddings reales, fusión α=0.7 y el reranker de Jina:
+
+| Consulta | Puesto | ms |
+|---|---:|---:|
+| «¿Qué requisitos exige el BCV para ser operador cambiario autorizado?» | 4 | 444 |
+| «¿Cuáles son los requisitos para ser operador cambiario autorizado?» | 4 | 502 |
+| «¿Quiénes pueden ser operadores cambiarios?» | 2 | 385 |
+| «requisitos para operar como operador cambiario» | 2 | 337 |
+| «qué se necesita para ser banco operador cambiario autorizado» | 1 | 376 |
+| «quién puede actuar como operador cambiario en Venezuela» | 1 | 369 |
+| «autorización para actuar como operador cambiario» | 1 | 354 |
+
+**7/7 en el top-5**, con la búsqueda completa —vectorizar la consulta, fusionar y
+reordenar— entre **337 y 502 ms**. La respuesta redactada por el modelo de
+lenguaje tarda unos 2-3 s adicionales.
+
+> **Sobre la escala de los puntajes.** Jina devuelve valores bajos (0.33, 0.21…)
+> y `bge-reranker` valores altos (0.96, 0.88…). No es un problema ni una señal de
+> peor calidad: solo se usa el **orden**, nunca la magnitud. Comparar esos
+> números entre proveedores no significa nada.
 
 ---
 
