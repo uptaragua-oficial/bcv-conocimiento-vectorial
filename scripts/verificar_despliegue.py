@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -50,12 +51,20 @@ def aviso(texto: str) -> None:
     print(f"  {color('•', AMARILLO)} {texto}")
 
 
-def peticion(url: str, metodo: str = "GET", cuerpo: dict | None = None, timeout: int = 45):
+def peticion(
+    url: str,
+    metodo: str = "GET",
+    cuerpo: dict | None = None,
+    timeout: int = 45,
+    cabeceras: dict | None = None,
+):
     """Devuelve (codigo, datos) donde datos es el JSON o el texto crudo."""
     datos = json.dumps(cuerpo).encode("utf-8") if cuerpo is not None else None
     pet = urllib.request.Request(url, data=datos, method=metodo)
     pet.add_header("Content-Type", "application/json")
     pet.add_header("Accept", "application/json")
+    for k, v in (cabeceras or {}).items():
+        pet.add_header(k, v)
     try:
         with urllib.request.urlopen(pet, timeout=timeout) as r:
             crudo = r.read().decode("utf-8", "replace")
@@ -73,6 +82,10 @@ def peticion(url: str, metodo: str = "GET", cuerpo: dict | None = None, timeout:
         return 0, str(e.reason)
     except Exception as e:  # noqa: BLE001
         return 0, str(e)
+
+
+def os_environ(nombre: str) -> str:
+    return os.environ.get(nombre, "")
 
 
 def corpus_local() -> int | None:
@@ -234,10 +247,176 @@ def prueba_funcional(base: str, es_nativo: bool, salud: dict) -> tuple[bool, lis
     return False, extra
 
 
+# ----------------------------------------------------------------------
+# Prueba directa de claves (independiente del despliegue)
+# ----------------------------------------------------------------------
+def _explicar(codigo: int, proveedor: str) -> str:
+    """Traduce un código HTTP al problema real, que casi nunca es el código."""
+    return {
+        401: f"clave ausente, inválida o sin permisos suficientes para {proveedor}",
+        402: "la cuenta no tiene saldo",
+        403: f"la clave no tiene permiso para usar {proveedor}",
+        404: "el modelo no existe o tu cuenta no tiene acceso a él",
+        422: "la petición no tiene el formato que espera el proveedor",
+        429: "límite de uso alcanzado: espera un momento y reintenta",
+        503: "el modelo está arrancando o no disponible en este momento",
+    }.get(codigo, f"error HTTP {codigo}")
+
+
+def _meta_local() -> dict:
+    ruta = RAIZ / "web" / "api" / "_data" / "embeddings_meta.json"
+    try:
+        return json.loads(ruta.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def probar_embeddings() -> bool:
+    """Comprueba que el token de Hugging Face devuelve un vector del tamaño correcto."""
+    meta = _meta_local()
+    clave = (os_environ("EMBEDDINGS_API_KEY") or os_environ("OPENAI_API_KEY") or "").strip()
+    print("  Embeddings")
+    if not clave:
+        fallo(
+            "EMBEDDINGS_API_KEY no está definida en esta terminal",
+            "expórtala para probarla aquí; en Vercel debe estar en Environment Variables",
+        )
+        return False
+
+    url = os_environ("EMBEDDINGS_URL") or meta.get("url_sugerida") or ""
+    modelo = os_environ("EMBEDDINGS_MODEL") or meta.get("modelo") or ""
+    formato = meta.get("formato", "huggingface")
+    prefijo = meta.get("prefijo_consulta", "")
+    dim = int(meta.get("dim") or 0)
+    print(color(f"    modelo: {modelo} · formato: {formato}", GRIS))
+    print(color(f"    prefijo de consulta: {prefijo!r}", GRIS))
+
+    cuerpo = {"inputs": [f"{prefijo}prueba de configuración"]}
+    if formato != "huggingface":
+        cuerpo = {"model": modelo, "input": [f"{prefijo}prueba de configuración"]}
+
+    codigo, datos = peticion(url, metodo="POST", cuerpo=cuerpo, cabeceras={"Authorization": f"Bearer {clave}"})
+    if codigo == 0:
+        fallo(f"No se pudo conectar con {url}", str(datos)[:160])
+        return False
+    if codigo != 200:
+        fallo(f"El proveedor de embeddings respondió HTTP {codigo}", _explicar(codigo, "Inference Providers"))
+        print(color(f"    respuesta: {str(datos)[:200]}", GRIS))
+        return False
+
+    vector = datos[0] if isinstance(datos, list) and datos and isinstance(datos[0], list) else datos
+    if not isinstance(vector, list) or not vector or not isinstance(vector[0], (int, float)):
+        fallo("La respuesta no contiene un vector", str(datos)[:200])
+        return False
+    if dim and len(vector) != dim:
+        fallo(
+            f"El vector tiene {len(vector)} dimensiones y los del corpus {dim}",
+            "El modelo configurado no es el mismo con el que se vectorizó el corpus",
+        )
+        return False
+    ok(f"Token válido: devuelve un vector de {len(vector)} dimensiones")
+    return True
+
+
+def probar_rerank() -> bool:
+    """Comprueba el proveedor de rerank con una petición mínima."""
+    print("\n  Rerank")
+    url = (os_environ("RERANK_API_URL") or "").strip()
+    clave = (os_environ("RERANK_API_KEY") or "").strip()
+    if not url:
+        aviso("RERANK_API_URL no está definida: el portal no reordenará")
+        return False
+
+    es_deepinfra = "deepinfra.com" in url or "/inference" in url
+    modelo = (os_environ("RERANK_MODEL") or "").strip()
+    destino = url.rstrip("/")
+    if es_deepinfra:
+        if "{model}" in destino:
+            destino = destino.replace("{model}", modelo or "Qwen/Qwen3-Reranker-0.6B")
+        elif not destino.split("/inference")[-1].strip("/"):
+            destino = f"{destino}/{modelo or 'Qwen/Qwen3-Reranker-0.6B'}"
+        cuerpo = {"queries": ["prueba"], "documents": ["documento uno", "documento dos"]}
+    else:
+        cuerpo = {"model": modelo or "BAAI/bge-reranker-v2-m3", "query": "prueba",
+                  "documents": ["documento uno", "documento dos"], "top_n": 2}
+
+    print(color(f"    endpoint: {destino}", GRIS))
+    codigo, datos = peticion(destino, metodo="POST", cuerpo=cuerpo, cabeceras={"Authorization": f"Bearer {clave}"})
+    if codigo == 0:
+        fallo(f"No se pudo conectar con el proveedor de rerank", str(datos)[:160])
+        return False
+    if codigo != 200:
+        fallo(f"El proveedor de rerank respondió HTTP {codigo}", _explicar(codigo, "DeepInfra"))
+        print(color(f"    respuesta: {str(datos)[:200]}", GRIS))
+        return False
+
+    puntajes = datos.get("scores") if isinstance(datos, dict) else None
+    if puntajes is None and isinstance(datos, dict):
+        puntajes = datos.get("results")
+    if not puntajes:
+        fallo("La respuesta no contiene puntajes", str(datos)[:200])
+        return False
+    ok(f"Proveedor operativo: devolvió {len(puntajes)} puntaje(s)")
+    return True
+
+
+def probar_llm() -> bool:
+    """Comprueba la clave del LLM con una petición mínima."""
+    print("\n  LLM")
+    for nombre, var, defecto in (
+        ("deepseek", "DEEPSEEK_API_KEY", "https://api.deepseek.com"),
+        ("groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1"),
+    ):
+        clave = (os_environ(var) or "").strip()
+        if not clave:
+            continue
+        base = (os_environ(var.replace("_API_KEY", "_BASE_URL")) or defecto).rstrip("/")
+        modelo = os_environ(var.replace("_API_KEY", "_MODEL")) or (
+            "deepseek-flash" if nombre == "deepseek" else "openai/gpt-oss-120b"
+        )
+        codigo, datos = peticion(
+            f"{base}/chat/completions",
+            metodo="POST",
+            cuerpo={"model": modelo, "messages": [{"role": "user", "content": "hola"}], "max_tokens": 1},
+            cabeceras={"Authorization": f"Bearer {clave}"},
+        )
+        if codigo == 200:
+            ok(f"{nombre} operativo ({modelo})")
+            return True
+        fallo(f"{nombre} respondió HTTP {codigo}", _explicar(codigo, nombre))
+        print(color(f"    respuesta: {str(datos)[:200]}", GRIS))
+        return False
+
+    aviso("Sin clave de LLM: el portal responderá en modo extractivo (es válido)")
+    return False
+
+
+def revisar_claves() -> int:
+    """Prueba las claves de esta terminal contra los proveedores reales."""
+    print("\nPrueba directa de claves (no depende del despliegue)")
+    print(color("  Se leen de las variables de entorno de ESTA terminal.\n", GRIS))
+    resultados = [probar_embeddings(), probar_rerank(), probar_llm()]
+    print("\n" + "─" * 68)
+    if all(resultados[:2]):
+        print(color("  Las dos claves críticas funcionan: el despliegue debería dar híbrida + rerank.", VERDE))
+    else:
+        print(color("  Alguna clave no funciona todavía. El detalle está arriba.", AMARILLO))
+    print()
+    return 0 if all(resultados[:2]) else 1
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Verifica un despliegue del portal")
     ap.add_argument("base", nargs="?", default="http://localhost:3001", help="URL base")
+    ap.add_argument(
+        "--claves",
+        action="store_true",
+        help="prueba las claves de esta terminal contra los proveedores, sin consultar el despliegue",
+    )
     args = ap.parse_args()
+
+    if args.claves:
+        raise SystemExit(revisar_claves())
     base = args.base.rstrip("/")
 
     print(f"\nVerificando {color(base, GRIS)}\n")

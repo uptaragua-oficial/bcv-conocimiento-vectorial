@@ -70,6 +70,40 @@ No requiere HuggingFace, ni túneles, ni servidores.
    consulta de referencia devuelva el artículo correcto. Si algo falta, dice qué
    variable y dónde.
 
+6. **Si algo no funciona, prueba las claves antes de tocar Vercel.** Este modo no
+   consulta el despliegue: lanza una petición mínima real contra cada proveedor
+   con las claves de tu terminal.
+
+   ```bash
+   export EMBEDDINGS_API_KEY=hf_...
+   export RERANK_API_URL=https://api.deepinfra.com/v1/inference/Qwen/Qwen3-Reranker-0.6B
+   export RERANK_API_KEY=...
+   export DEEPSEEK_API_KEY=sk-...
+   python -m scripts.verificar_despliegue --claves
+   ```
+
+   Distingue «la clave no vale» de «la clave no llegó al despliegue», que son
+   problemas distintos con arreglos distintos.
+
+### Si el portal responde sin citar el Art. 12
+
+Síntoma: el asistente contesta que el contexto no contiene la información, y
+cita fragmentos sobre cotizaciones, reintegros y formularios. Es la huella de que
+**la consulta corrió sin embeddings o sin rerank**. Causas, por orden de
+frecuencia:
+
+| Causa | Cómo confirmarlo |
+|---|---|
+| **No se redesplegó tras añadir las variables** | Las variables de entorno solo se aplican a un despliegue **nuevo**: Vercel → Deployments → Redeploy |
+| Las variables se añadieron solo a *Production* y estás viendo un *Preview* (o al revés) | Settings → Environment Variables: mira a qué entornos está asignada cada una |
+| El nombre no es exacto (`HF_TOKEN` en vez de `EMBEDDINGS_API_KEY`) | La tabla de arriba es literal |
+| El token de HF no tiene el permiso «Make calls to Inference Providers» | `python -m scripts.verificar_despliegue --claves` |
+| Falta el rerank | Sin él, el Art. 12 se queda en el puesto 20 y **nunca** entra en el top-5 |
+
+> **El rerank no es opcional para esta consulta.** Con embeddings pero sin
+> rerank, el Art. 12 no aparece en el top-5: solo el cross-encoder lo sube del
+> puesto 20 al 3.º. Comprobado con α=0.5, α=0.7, RRF y unión de candidatos.
+
 ### Si el build falla con «does not define a top-level app FastAPI instance»
 
 Ese error aparece cuando Vercel construye desde **la raíz del repositorio** y
