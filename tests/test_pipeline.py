@@ -64,6 +64,49 @@ def test_ner_respaldo_por_reglas():
     assert any("institucion" in e for e in ents)
 
 
+def test_ner_combina_motores_por_etiqueta():
+    """Las etiquetas de vocabulario cerrado salen de las reglas, sin GLiNER.
+
+    Se midió que GLiNER detecta el 0 % de los tipos de norma, así que en esas
+    etiquetas su aportación sería solo ruido. Se comprueba con un tagger falso
+    que devuelve una entidad inventada en una etiqueta cerrada: no debe entrar.
+    """
+
+    class TaggerFalso:
+        def predict_entities(self, texto, etiquetas, threshold=None):
+            return [
+                {"label": "tipo_de_norma", "text": "inventada"},
+                {"label": "institucion", "text": "Banco Central de Venezuela"},
+            ]
+
+    ents = ner.extract_entities("Resolución del Banco Central de Venezuela", tagger=TaggerFalso())
+    assert not any(e == "tipo_de_norma:inventada" for e in ents), "GLiNER no manda aquí"
+    assert "tipo_de_norma:resolución" in ents, "la regla sí"
+    # En `institucion`, en cambio, GLiNER es el que aporta
+    assert any(e.startswith("institucion:") and "banco central" in e for e in ents)
+
+
+def test_ner_normaliza_espacios_y_descarta_falsos_positivos():
+    """Un salto de línea dentro de una entidad la convertía en otra distinta.
+
+    `banco central de\nvenezuela` y `banco central de venezuela` eran valores
+    diferentes, así que filtrar por el correcto perdía fragmentos sin avisar.
+    """
+    assert ner.normalizar_entidades(["institucion:banco central de\nvenezuela"]) == [
+        "institucion:banco central de venezuela"
+    ]
+    assert ner.normalizar_entidades(["moneda:moneda   nacional"]) == ["moneda:moneda nacional"]
+    assert ner.normalizar_entidades(["periodo: 2019 "]) == ["periodo:2019"]
+    # Falsos positivos medidos con scripts/comparar_ner.py
+    assert ner.normalizar_entidades(["moneda:tipo de cambio"]) == []
+    assert ner.normalizar_entidades(["sistema_de_pago:sistema de mercado cambiario"]) == []
+    # Deduplica conservando el orden
+    assert ner.normalizar_entidades(["moneda:bs", "moneda:bs", "periodo:2019"]) == [
+        "moneda:bs",
+        "periodo:2019",
+    ]
+
+
 def test_metricas_recuperacion():
     rel = {"a"}
     rec = ["x", "a", "b"]

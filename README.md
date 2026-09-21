@@ -162,6 +162,7 @@ Artefactos: `data/index/evaluation_report.json` (métricas) y
 | [`docs/TECNICAS-Y-METRICAS.md`](docs/TECNICAS-Y-METRICAS.md) | **Técnicas de búsqueda y métricas, cada una definida en el texto** |
 | [`docs/COMPARATIVA-MODELOS.md`](docs/COMPARATIVA-MODELOS.md) | Comparación medida de modelos de *embeddings* |
 | [`docs/RERANK.md`](docs/RERANK.md) | Reordenación con cross-encoder: qué resuelve y qué se midió |
+| [`docs/INFORME-NER.md`](docs/INFORME-NER.md) | Comparación medida de motores de NER: reglas frente a GLiNER |
 | [`docs/PROVEEDORES-RERANK.md`](docs/PROVEEDORES-RERANK.md) | DeepInfra frente a Jina: precios, límites y formatos de API |
 | [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) | Despliegue en Vercel y verificación |
 | [`docs/VECTORIZAR.md`](docs/VECTORIZAR.md) | Cómo generar los vectores del corpus |

@@ -66,6 +66,12 @@ pedir «solo fragmentos que mencionen el BCV y el mercado cambiario». Cuando el
 modelo no está disponible, un conjunto de expresiones regulares hace de respaldo
 para no detener el procesamiento.
 
+> **Qué motor conviene para cada etiqueta no es obvio, y se midió.** Sobre 500
+> fragmentos del corpus, GLiNER detecta el 0 % de los tipos de norma mientras las
+> reglas alcanzan el 92 %, y en cambio aporta entidades que las reglas no tienen
+> («divisas», «títulos valores»). El detalle y la combinación adoptada están en
+> [`INFORME-NER.md`](INFORME-NER.md).
+
 ---
 
 ## 2. Técnicas de recuperación

@@ -68,14 +68,79 @@ def _gliner_entities(tagger, texto: str) -> list[str]:
     return list(dict.fromkeys(f"{e['label']}:{e['text'].strip().lower()}" for e in ents))
 
 
+#: Pares (etiqueta, valor) que el modelo produce con seguridad pero que son
+#: incorrectos en este dominio. Se midieron sobre 500 fragmentos con
+#: `scripts/comparar_ner.py`; conviene añadir aquí solo lo que se haya medido,
+#: no lo que a uno le parezca.
+FALSOS_POSITIVOS = {
+    ("sistema_de_pago", "sistema de mercado cambiario"),   # 8 casos
+    ("sistema_de_pago", "mecanismo de intervención cambiaria"),  # 6 casos
+    ("moneda", "tipo de cambio"),                          # es un indicador, no una moneda
+}
+
+
+def normalizar_entidades(entidades: list[str]) -> list[str]:
+    """Deja las entidades en forma canónica.
+
+    **Une los espacios, incluidos los saltos de línea.** Sin esto, un mismo
+    concepto aparece como valores distintos: `banco central de\nvenezuela` (169
+    fragmentos) frente a `banco central de venezuela` (1 266). Un filtro por el
+    nombre correcto perdería los 169 sin que nada lo advirtiera, porque para el
+    sistema son entidades diferentes.
+
+    Descarta además los falsos positivos medidos y deduplica conservando el orden.
+    """
+    salida = []
+    for e in entidades:
+        et, _, v = e.partition(":")
+        v = " ".join(v.split())  # colapsa \n, \t y espacios repetidos
+        if not v or (et, v) in FALSOS_POSITIVOS:
+            continue
+        salida.append(f"{et}:{v}")
+    return list(dict.fromkeys(salida))
+
+
+#: Etiquetas en las que las reglas son claramente superiores.
+#:
+#: Medido con `scripts/comparar_ner.py` sobre 500 fragmentos del corpus, usando
+#: los metadatos de la ingesta como verdad de referencia (si un fragmento viene
+#: de una Resolución, debería detectarse «resolución» en su texto):
+#:
+#:   etiqueta              reglas   GLiNER
+#:   tipo_de_norma           87 %      0 %      GLiNER no detecta ninguna
+#:   indicador_economico    100 %      1 %      («tipo de cambio» incl.)
+#:   periodo                  —        ruido     «plazo», «mes», «semana»
+#:   materia_cambiaria        —        0 %      no detecta ninguna
+#:
+#: Pasar etiquetas en lenguaje natural en vez de con guiones bajos NO cambia
+#: nada (se midió: 23 % frente a 24 % de cobertura morfológica), así que no era
+#: un problema de cómo se escriben las etiquetas.
+SOLO_REGLAS = {"tipo_de_norma", "periodo", "materia_cambiaria", "indicador_economico"}
+
+
 def extract_entities(texto: str, tagger=None) -> list[str]:
-    """Entidades de un chunk (GLiNER si hay tagger; si no, reglas)."""
-    if tagger is not None:
-        try:
-            return _gliner_entities(tagger, texto)
-        except Exception:  # noqa: BLE001
-            pass
-    return _regex_entities(texto)
+    """Entidades de un chunk.
+
+    Sin GLiNER, solo reglas. Con GLiNER, **combinación por etiqueta**: las reglas
+    para el vocabulario cerrado, donde son mejores y más precisas, y la unión de
+    ambos para las etiquetas abiertas, donde GLiNER aporta términos que las
+    reglas pierden por completo («divisas», «tarjetas de crédito», «deuda pública
+    nacional», «bancos universales»).
+    """
+    reglas = _regex_entities(texto)
+    if tagger is None:
+        return normalizar_entidades(reglas)
+
+    try:
+        gliner = _gliner_entities(tagger, texto)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[aviso] GLiNER falló en un fragmento ({exc}); se usan solo las reglas")
+        return normalizar_entidades(reglas)
+
+    combinado = [e for e in reglas if e.split(":", 1)[0] in SOLO_REGLAS]
+    combinado += [e for e in reglas if e.split(":", 1)[0] not in SOLO_REGLAS]
+    combinado += [e for e in gliner if e.split(":", 1)[0] not in SOLO_REGLAS]
+    return normalizar_entidades(combinado)
 
 
 def run() -> list[dict]:
@@ -85,10 +150,13 @@ def run() -> list[dict]:
 
     chunks = [json.loads(l) for l in src.read_text(encoding="utf-8").splitlines() if l.strip()]
     tagger = load_tagger()
-    motor = "GLiNER" if tagger else "regex"
+    motor = "combinado (reglas + GLiNER)" if tagger else "reglas (GLiNER no disponible)"
 
     for i, c in enumerate(chunks, 1):
         c["entidades"] = extract_entities(c.get("texto", ""), tagger)
+        # Se deja constancia del motor en los propios datos: antes, si GLiNER no
+        # cargaba, el corpus quedaba con entidades de reglas y nada lo indicaba.
+        c["motor_ner"] = "combinado" if tagger else "reglas"
         if i % 25 == 0 or i == len(chunks):
             print(f"  NER {i}/{len(chunks)}")
 
