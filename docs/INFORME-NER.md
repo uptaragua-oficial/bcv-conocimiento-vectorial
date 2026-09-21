@@ -57,8 +57,25 @@ completo.
 
 ## 3. Cobertura morfológica
 
-Porcentaje de fragmentos que contienen la forma y en los que el motor produce una
-entidad de la etiqueta correcta:
+**Cómo se lee esta tabla, porque es fácil equivocarse:**
+
+- `n` = fragmentos **de la muestra** que contienen esa forma literal (búsqueda de
+  texto, no una selección manual). Son cifras pequeñas porque la muestra es de
+  500 sobre 2 664 fragmentos.
+- El porcentaje = de esos `n`, en cuántos el motor produjo una entidad **de esa
+  etiqueta**.
+
+> ⚠️ **Ese porcentaje no significa «capturó esa forma»**, sino «ese fragmento
+> acabó con una entidad de esa etiqueta, viniera de donde viniera». Para
+> «operadores cambiarios» la diferencia es grande: de los 60 fragmentos del
+> corpus que contienen ese plural, **26 (43 %) contienen además «mercado
+> cambiario» u otra forma que sí casa**, y es esa la que dispara la regla. La
+> medición estricta —¿se capturó *esta* forma?— está en el apartado **3b**, y ahí
+> el plural da 0 % en todos los motores. **La conclusión práctica sale de 3b.**
+
+Dicho eso, la tabla del apartado 3 responde a una pregunta que también importa:
+¿el fragmento queda con una entidad de la etiqueta correcta? Eso es lo que
+determina si un filtro lo encontrará.
 
 | Forma esperada | Etiqueta | n | Reglas | GLiNER |
 |---|---|---:|---:|---:|
@@ -86,6 +103,14 @@ en BM25 se resolvió truncando a 7 caracteres — aquí **no está resuelto**.
 
 GLiNER gana en un solo caso: `bancos universales` (76 %), donde las reglas no
 tienen ni una alternativa.
+
+**Un hallazgo colateral:** la forma `mesa de cambio` **en singular no aparece en
+ningún fragmento del corpus** (0 de 2 664). La expresión regular tiene esa
+alternativa, pero nunca se ejecuta; solo existe el plural, «mesas de cambio» (23
+fragmentos), que no se captura. Lo mismo ocurre con `\b(ley|…)\b`, cuyos topes de
+palabra impiden casar `leyes`. La causa es la misma en ambos casos: **las reglas
+no tienen morfología**. En BM25 ese problema se resolvió truncando a 7 caracteres;
+aquí no está aplicado.
 
 ---
 
