@@ -43,10 +43,13 @@ el total.
 | Ley | 14 | 10 | **90 %** | 0 % |
 | Aviso oficial | 27 | 11 | **82 %** | 0 % |
 
-GLiNER detecta **cero** tipos de norma en unas 120 oportunidades reales. No es
-una diferencia de grado: es que la categoría «tipo de norma» no le funciona.
-En la inspección manual se vio por qué — en un texto con «decreto», «ley» y
-«resolución», GLiNER detectó cinco entidades y ninguna era una norma.
+GLiNER detecta **cero** tipos de norma en unas 120 oportunidades reales.
+
+Al principio se atribuyó a que la categoría «tipo de norma» no le funciona. El
+apartado 8.3 muestra que la explicación es más matizada: en parte es que no la ve,
+y en parte es que **la ve con una confianza tan baja que el umbral la descarta**.
+En cualquier caso el resultado operativo es el mismo, y la conclusión —usar las
+reglas para esta etiqueta— no cambia.
 
 Las reglas, en cambio, alcanzan el techo en Circular y Decreto, y quedan cerca en
 Resolución y Ley. La excepción es **Convenio cambiario** (69 %): muchos de esos
@@ -207,7 +210,7 @@ en la fase de ingesta, que se ejecuta una vez.
 
 ---
 
-## 8. Dos hallazgos posteriores que cambian el panorama
+## 8. Tres hallazgos posteriores que cambian el panorama
 
 ### 8.1 GLiNER solo lee los primeros 384 tokens
 
@@ -263,6 +266,46 @@ Se corrigió uniendo todos los espacios internos (`" ".join(v.split())`), lo que
 fusionó **776 entradas duplicadas** sobre el total del corpus, y se añadió una
 lista de falsos positivos medidos. Ambos cambios viven en
 `src/ner.py::normalizar_entidades` y están cubiertos por pruebas.
+
+### 8.3 La causa real del 0 %: el umbral, no (solo) la capacidad
+
+Cerrando el cabo suelto anterior se midió la **puntuación** que GLiNER asigna a las
+menciones, en vez de mirar solo si pasaban el umbral. Se consultó con
+`threshold=0.05` para poder ver el valor.
+
+`mesas de cambio`, en diez fragmentos reales que la contienen:
+
+| Puntuación | ¿Pasa el umbral 0,4? |
+|---:|---|
+| 0,052 | no |
+| 0,051 | no |
+| 0,070 | no |
+| 0,129 | no |
+| *(sin detección)* | 6 de 10 |
+
+`Resolución`, en doce fragmentos que la contienen:
+
+| Puntuación | ¿Pasa el umbral 0,4? |
+|---:|---|
+| 0,072 · 0,054 · 0,064 · 0,051 · 0,076 · 0,118 | **ninguna** |
+| *(sin detección)* | 8 de 12 |
+
+**La conclusión es que el problema dominante no es que GLiNER no sepa, sino que
+pierde confianza.** Con textos largos y etiquetas abstractas de dominio, sus
+puntuaciones caen a 0,05-0,13, tres o cuatro veces por debajo del umbral de 0,4
+—calibrado para entidades de propósito general, no para «tipo de norma» o
+«materia cambiaria».
+
+Conviene fijarse en que en la frase limpia y corta de la prueba manual GLiNER sí
+daba 0,402 para «mesas de cambio»: **pasa el umbral por dos milésimas**. La misma
+mención, dentro de un fragmento real de 1 800 caracteres, cae a 0,051.
+
+**¿Y bajar el umbral?** No compensa, y se puede decir con datos: a 0,05 GLiNER
+recupera 4 de 12 «Resolución» frente al 92 % de las reglas, y para lograrlo
+empieza a producir spans incorrectos como *«Los reportes generados por las mes»*
+(0,052). Se cambiaría un problema de cobertura por uno de precisión.
+
+Esto refuerza la decisión de la combinación por etiqueta en vez de debilitarla.
 
 ---
 
